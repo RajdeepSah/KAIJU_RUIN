@@ -25,6 +25,7 @@ namespace KaijuRuin
             game.AddComponent<AudioListener>();   // single persistent listener (fight camera adds none)
             game.AddComponent<AudioManager>();
             game.AddComponent<PerfMonitor>();     // dev-only fps + input-to-impact overlay (F1)
+            game.AddComponent<NetService>();      // persistent networking facade (loopback by default)
             game.AddComponent<GameManager>();
         }
     }

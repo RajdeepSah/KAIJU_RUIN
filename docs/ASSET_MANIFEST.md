@@ -72,6 +72,8 @@ Scope: this list covers the **vertical slice** (Vision Goal 1: full touch combat
 | ui_ability_icons_tengi | assets/ui/ability_icons_tengi.png | 1536×512 PNG, alpha, 3 tiles | placeholder | row of three ability-card illustrations for Tengi: the culling blade raised against a black sun, a descending culling arc, a wall of crow feathers |
 | ui_icon_sheet | assets/ui/icon_sheet.png | 1024×256 PNG, alpha | placeholder | row of four single-weight ink glyph icons: pause, settings, tag-switch, block |
 | ui_vs_screen | assets/ui/vs_screen.png | 1920×1080 PNG | placeholder | VS screen background: split ink wash, Blood Seal left, Goryō Flame right, empty portrait zones both sides |
+| ui_menu_bg | assets/ui/menu_bg.png | 2560×1440 PNG | planned | shared front-end backdrop for the multiplayer, character-select, and lobby screens: brooding ink-wash harbor at dusk with heavy negative space through the center for menu elements, no characters, no lettering (added session 6, D-017 — MultiplayerMenu/CharacterSelect/Lobby reference `ui/menu_bg` via AssetLib.SpriteOr, falling back to `stages/harbor_sky` until generated) |
+| ui_roster_card | assets/ui/roster_card.png | 512×256 PNG, alpha, 9-slice | planned | character-select roster slot: sharp-cornered comic-panel card frame in ink with a rough brush edge, Bone Paper fill, empty portrait window at the left and a blank name/tagline strip at the right, no lettering (added session 6, D-017 — CharacterSelectMenu tints this per selection; falls back to a plain fill until generated) |
 
 ## VFX
 
@@ -83,6 +85,9 @@ Scope: this list covers the **vertical slice** (Vision Goal 1: full touch combat
 | vfx_kest_foxfire | assets/vfx/kest_foxfire.png | 512×512 PNG, alpha | placeholder | Kest special-move effect: streaking spectral teal fox-fire trail with ember wisps |
 | vfx_tengi_bladewave | assets/vfx/tengi_bladewave.png | 1024×512 PNG, alpha | placeholder | Tengi special-move effect: dark crescent blade wave edged in Blood Seal, trailing crow feathers |
 | vfx_kaiju_shockwave | assets/vfx/kaiju_shockwave.png | 1024×256 PNG, alpha | placeholder | horizontal ground shockwave of dust, seawater, and debris for the Khulandra stage event |
+| vfx_dash_streak | assets/vfx/dash_streak.png | 512×512 PNG, alpha | placeholder | dash / afterimage motion streak: horizontal spectral speed-trail with ghosting ink echoes (code tints it per fighter — teal for Kest, crimson for Tengi) |
+| vfx_parry_spark | assets/vfx/parry_spark.png | 512×512 PNG, alpha | placeholder | perfect-guard burst: radial spectral spirit-flame flash with sharp concentric ink shards deflecting outward |
+| vfx_impact_ring | assets/vfx/impact_ring.png | 512×512 PNG, alpha | placeholder | concussive impact ring: single expanding bone-white shockwave ring edged in black ink with screentone falloff, empty dark center |
 
 ## Audio
 
@@ -117,6 +122,30 @@ Scope: this list covers the **vertical slice** (Vision Goal 1: full touch combat
 |---|---|---|---|---|---|
 | font_hud | assets/fonts/hud.ttf | condensed grotesque sans | placeholder | OFL (proposed: Barlow Condensed) | HUD, numbers, body UI text |
 | font_display | assets/fonts/display.ttf | rough brush display face | placeholder | TBD — verify before ship | titles, Horrific Ending captions |
+
+## Planned generation queue — Multiplayer (M6, D-017)
+
+*Everything the multiplayer feature needs, ready to generate on the owner command **"generate necessary artwork"**. Nothing here is generated yet — the game ships today on the fallbacks noted in each row. When the command comes, generate in this order per the ART_DIRECTION §4 pipeline, then flip each row to `placeholder` and append its generation record below. The prompts are pre-composed to the §5 template (STYLE CORE + recipe + subject + avoid-list) — paste verbatim.*
+
+**Nothing else is code-blocked on these:** `AssetLib.SpriteOr` already prefers the dedicated path and falls back, and `scripts/sync_assets.sh` already copies `assets/ui/*.png`, so each asset lights up on the next sync with zero code change.
+
+1. **ui_menu_bg** (`assets/ui/menu_bg.png`, 2560×1440) — recipe: *Stage layer*. Prompt:
+   > mature dark comic book illustration, heavy black ink lines, dramatic chiaroscuro lighting, gritty screentone shading, desaturated palette of ash gray and bone white with blood red and spectral teal accents, Japanese folklore meets near-future 2061 technothriller, cinematic composition, high contrast, wide 2D fighting game stage background, horizontal composition, clear flat ground plane, layered depth with atmospheric haze, no characters, brooding ink-wash harbor at dusk with heavy negative space through the center for menu elements, no characters, no lettering, no text, no watermark, no signature, no photorealism, no bright anime cel shading, no chibi proportions
+
+2. **ui_roster_card** (`assets/ui/roster_card.png`, 512×256, alpha, 9-slice) — recipe: *UI element* → then `remove_background`. Prompt:
+   > mature dark comic book illustration, heavy black ink lines, dramatic chiaroscuro lighting, gritty screentone shading, desaturated palette of ash gray and bone white with blood red and spectral teal accents, Japanese folklore meets near-future 2061 technothriller, cinematic composition, high contrast, flat game UI element, single-weight ink line style, on a plain solid background, sharp-cornered comic-panel card frame with a rough brush ink edge, bone paper fill, empty portrait window at the left and a blank name strip at the right, no lettering, no text, no watermark, no signature, no photorealism, no bright anime cel shading, no chibi proportions
+
+### New-character art template (per champion added to CharacterRoster)
+
+Adding a champion is code-ready today (one `CharacterDef`, D-017). Its **art** is these five rows — clone Kest's, swap `<id>`/subject, and the shared code picks them up by canonical path (portraits/models/anim GLBs are already synced by pattern; a champion may reuse Kest's `*_anim_*` clips per the D-011 slice rule, in which case only apose/model/portrait are new):
+
+| Row | Path | Recipe | Feeds |
+|---|---|---|---|
+| `char_<id>_apose` | `assets/characters/<id>_apose.png` (1024×1536) | Character sheet | `generate_3d` → model |
+| `char_<id>_model` | `assets/characters/<id>_model.glb` | (derived, `generate_3d`) | in-fight mesh |
+| `char_<id>_portrait` | `assets/characters/<id>_portrait.png` (1024×1024, alpha) | Portrait | select + VS + HUD |
+| `char_<id>_anim_*` | `assets/characters/<id>_anim_{idle,walk,punch,block,hit,death}.glb` | (rig clips, D-011) | animation (or reuse Kest's) |
+| `ui_ability_icons_<id>` | `assets/ui/ability_icons_<id>.png` (1536×512, alpha, 3 tiles) | UI element | card icons (`IconKey`) |
 
 ## Generation records (append-only)
 
@@ -396,6 +425,27 @@ Scope: this list covers the **vertical slice** (Vision Goal 1: full touch combat
 - Seed: n/a
 - Prompt: STYLE CORE-derived UI/VFX prompt + row subject line + avoid-list (verbatim in job params)
 - Notes: trim-fit to 1024×256 RGBA
+
+### vfx_dash_streak — 2026-07-19 (session 5, D-015)
+- Model: recraft_v4_1 (1k 1:1, black bg), 1.25 credits
+- Job ID: 29d3776e-049f-4266-b1af-ecdfa131fed6
+- Seed: n/a
+- Prompt: `mature dark comic book illustration, heavy black ink lines, dramatic chiaroscuro lighting, gritty screentone shading, desaturated palette of ash gray and bone white with blood red and spectral teal accents, Japanese folklore meets near-future 2061 technothriller, cinematic composition, high contrast, stylized 2D fight effect, ink splash energy, centered on a plain solid black background, horizontal motion-streak afterimage, spectral teal speed trail with ghosting echoes and ink smear, the trailing wake of a fighter dashing, glowing against pure black, no text, no watermark, no signature, no photorealism, no bright anime cel shading, no chibi proportions`
+- Notes: value-keyed to alpha locally (Pillow, per-pixel max(R,G,B), black floor 20), resized 512×512 RGBA. Code tints it per fighter (CombatSystem.SpawnDash uses Fighter.Theme).
+
+### vfx_parry_spark — 2026-07-19 (session 5, D-015)
+- Model: recraft_v4_1 (1k 1:1, black bg), 1.25 credits
+- Job ID: 22a14553-1f7d-4edd-8d10-36f30665e450
+- Seed: n/a
+- Prompt: `...STYLE CORE + VFX recipe..., radial perfect-guard burst, spectral teal spirit-flame flash with sharp concentric ink shards deflecting outward from a bright core, glowing against pure black, ...avoid-list` (full text = STYLE CORE, VFX recipe, this subject, universal avoid-list)
+- Notes: value-keyed to alpha locally (Pillow, black floor 20), 512×512 RGBA. Used by CombatSystem parry branch (fallback meter_flare).
+
+### vfx_impact_ring — 2026-07-19 (session 5, D-015)
+- Model: recraft_v4_1 (1k 1:1, black bg), 1.25 credits
+- Job ID: 11fad325-2f27-40e0-9c40-76dd493d7727
+- Seed: n/a
+- Prompt: `...STYLE CORE + VFX recipe..., a single expanding concussive impact ring, bone-white shockwave ring edged in black ink with screentone falloff, empty dark center, glowing against pure black, ...avoid-list`
+- Notes: value-keyed to alpha locally (Pillow, black floor 20), 512×512 RGBA. Spawned on Heavy/Special clean hits (fallback hit_spark).
 
 ### font_hud — 2026-07-18
 - Model: n/a (sourced, not generated)

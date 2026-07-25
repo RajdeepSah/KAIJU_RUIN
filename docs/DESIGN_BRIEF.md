@@ -33,7 +33,9 @@ Screen is split into interaction zones. Every gesture routes to a named C# metho
 - RIGHT HALF, swipe toward opponent: heavy attack (PlayerController.HeavyAttack()).
 - RIGHT HALF, swipe up: launcher (PlayerController.Launcher()).
 - RIGHT HALF, swipe down: sweep (PlayerController.Sweep()).
-- RIGHT HALF, press and hold (no movement): block while held (PlayerController.SetBlock(bool held)).
+- RIGHT HALF, swipe away from opponent: evasive back-dash with i-frames (PlayerController.BackDash()) - session 5, D-016 (was a no-op).
+- RIGHT HALF, tap / swipe up while the opponent is airborne: air-juggle follow-ups (Air Rake / Air Slam) - session 5, D-015; contextual, no new gesture.
+- RIGHT HALF, press and hold (no movement): block while held; a block that connects within 160 ms of its start is a parry (PlayerController.SetBlock(bool held)) - session 5, D-015.
 - BOTTOM-RIGHT: three ability card buttons labeled with card art (ui_ability_icons_kest tiles); tap spends meter (PlayerController.CastSpecial(int slot)).
 - TOP-RIGHT: PAUSE button (GameManager.TogglePause()).
 - Input-to-impact: gesture recognition resolves on touch-up or 120 ms of hold, whichever is first; attack anims cancel their first 2 frames into the next buffered input.
@@ -57,6 +59,21 @@ Both champions: 1000 HP, meter of 3 segments (a segment charges per 150 damage d
 | 11 | Tengi S1: Crow Wall | card 1 (1 seg) | 1.2 s counter stance; countered hit answers for 130 dmg (vfx feathers) |
 | 12 | Tengi S2: Culling Arc | card 2 (2 seg) | horizontal blade wave, 180 dmg, plays vfx_tengi_bladewave |
 | 13 | Tengi S3: Black Sun | card 3 (3 seg) | slow overhead execution arc, 300 dmg, huge recovery on whiff |
+
+## MOVES v2 - combat expansion (session 5, D-015 - owner directive "lean into the fighter")
+
+Layered onto the SAME one-thumb control scheme; the only new gesture binding is the previously-dead swipe-away (D-016). Core loop, architecture, HP/meter, and environment art are unchanged. Universal-normal recoveries were trimmed for a faster fight (jab/cross 0.20s, finisher 0.38s, heavy 0.62s, launcher/sweep 0.50s) and walk speed raised to 3.0 (Kest 3.1 / Tengi 2.8); damage numbers and meter economy are unchanged.
+
+| # | Move | Trigger | Behavior |
+|---|---|---|---|
+| 14 | Back-dash (Evade) | swipe away from opponent | ~1.2 m backward hop, i-frames 0.24 s, recovery 0.30 s, dust VFX; neutral-only (not a recovery-cancel). Resolves the away-swipe reservation. |
+| 15 | Air Rake | tap while opponent is airborne | 55 dmg juggle hit that keeps them airborne; part of the launcher juggle route |
+| 16 | Air Slam | swipe up while opponent is airborne | 95 dmg spike, ends the juggle with knockback; heavy hit-stop |
+| 17 | Parry (perfect guard) | block that connects within 160 ms of its start | 0 dmg / 0 chip, attacker stunned ~0.45 s (punish window), defender +60 meter, teal spark + screen flash |
+| 18 | Special-cancel | cast a card during your own attack recovery | spends meter to cancel the recovery and link the special ("normal xx special" combos) |
+| 19 | Chain-cancel enders | during a connected light chain: swipe up / in / down | cancels the light's recovery into launcher / heavy / sweep (target combos); launcher ender opens the air juggle |
+
+Feel systems (all render/timing only, never touch the deterministic sim): per-hit hit-stop scaled by move weight (light 45 ms to special 140 ms), camera shake + dolly-in punch on heavies/launchers/specials/KO, and a per-move procedural body-motion layer (ProcAnim) that gives each move a distinct silhouette on the shared rig (lunge, uppercut rise, low crouch, back-hop, air reach, character-flavoured special) at zero generation cost. Per-character feel: Kest agile (faster cadence, teal foxfire), Tengi heavy (slower, broader swings, crimson). New move VFX: vfx_dash_streak, vfx_parry_spark, vfx_impact_ring (generated) plus code-composited tints of existing sprites; all degrade gracefully if unsynced. HUD gained a combo counter and a parry cue. Full rationale and invariants: DECISIONS D-015 / D-016.
 
 ## ENEMY AI (Tengi)
 

@@ -18,6 +18,7 @@ namespace KaijuRuin
         Fighter enemy;
         EnemyAI enemyAi;
         Camera cam;
+        Vector3 camBase;        // pre-shake camera target (shake/punch add on top)
 
         int round;                  // 1-based
         int playerRounds, enemyRounds;
@@ -40,6 +41,7 @@ namespace KaijuRuin
             cam.fieldOfView = 42f;
             cam.backgroundColor = AssetLib.SumiInk;
             cam.clearFlags = CameraClearFlags.SolidColor;
+            camBase = cam.transform.position;
 
             var lightGo = new GameObject("KeyLight", typeof(Light));
             var light = lightGo.GetComponent<Light>();
@@ -51,35 +53,46 @@ namespace KaijuRuin
             var stage = new GameObject("Stage").AddComponent<StageManager>();
             stage.Build(cam);
 
-            // Fighters (rigged GLBs + clip GLBs generated on Kest's rig; Tengi
-            // reuses the same skeleton's clips per D-011 slice rule).
-            var clipFiles = new Dictionary<string, string> {
-                { "idle", "kest_anim_idle.glb" }, { "walk", "kest_anim_walk.glb" },
-                { "punch", "kest_anim_punch.glb" }, { "block", "kest_anim_block.glb" },
-                { "hit", "kest_anim_hit.glb" }, { "death", "kest_anim_death.glb" },
-            };
+            // Fighters are data-driven from the negotiated match (MatchConfig ->
+            // CharacterRoster, D-017). Champions share Kest's rig clips per the D-011
+            // slice rule via AnimClipPrefix. Parented under the fight root so they die
+            // with it on cleanup (survives mirror matches with duplicate model names).
+            var localDef = MatchConfig.Local;
+            var oppDef = MatchConfig.Opponent;
 
-            var loadP = GltfCharacterLoader.LoadCharacter("kest_model.glb", clipFiles, new Vector3(-2.5f, 0f, 0f), true, null);
+            var loadP = GltfCharacterLoader.LoadCharacter(localDef.ModelGlb, ClipFiles(localDef), new Vector3(-2.5f, 0f, 0f), true, transform);
             while (!loadP.IsCompleted) yield return null;
-            var kestGo = loadP.Result;
+            var playerGo = loadP.Result;
 
-            var loadE = GltfCharacterLoader.LoadCharacter("tengi_model.glb", clipFiles, new Vector3(2.5f, 0f, 0f), false, null);
+            var loadE = GltfCharacterLoader.LoadCharacter(oppDef.ModelGlb, ClipFiles(oppDef), new Vector3(2.5f, 0f, 0f), false, transform);
             while (!loadE.IsCompleted) yield return null;
-            var tengiGo = loadE.Result;
+            var oppGo = loadE.Result;
 
-            player = kestGo.AddComponent<Fighter>();
-            player.DisplayName = "KEST";
-            player.Anim = kestGo.GetComponent<FighterAnimator>();
-            var pc = kestGo.AddComponent<PlayerController>();
+            player = ConfigureFighter(playerGo, localDef, faceRight: true);
+            var pc = playerGo.AddComponent<PlayerController>();
 
-            enemy = tengiGo.AddComponent<Fighter>();
-            enemy.DisplayName = "TENGI";
-            enemy.Anim = tengiGo.GetComponent<FighterAnimator>();
-            enemy.FacingRight = false;
-            enemyAi = tengiGo.AddComponent<EnemyAI>();
+            enemy = ConfigureFighter(oppGo, oppDef, faceRight: false);
 
             player.Opponent = enemy;
             enemy.Opponent = player;
+
+            // Opponent control: a live remote peer if a real transport is connected,
+            // otherwise the AI (solo + the shipping loopback online path, D-017).
+            if (MatchConfig.RemoteOpponent && NetService.I != null && NetService.I.Transport != null)
+            {
+                var oc = oppGo.AddComponent<PlayerController>();
+                oc.Local = false;                          // remote inputs never touch the local HUD
+                var rc = oppGo.AddComponent<RemoteController>();
+                rc.Control = oc;
+                rc.Bind(NetService.I.Transport);
+                // Local send seam (symmetric with RemoteController): local input
+                // capture -> relay.Push is completed alongside the RelayTransport backend (D-017).
+                playerGo.AddComponent<NetInputRelay>().Bind(NetService.I.Transport);
+            }
+            else
+            {
+                enemyAi = oppGo.AddComponent<EnemyAI>();
+            }
 
             var input = gameObject.AddComponent<TouchInput>();
             input.Player = pc;
@@ -125,12 +138,16 @@ namespace KaijuRuin
         IEnumerator StartRound()
         {
             RoundFrozen = true;
+            CombatFx.Reset();                 // no freeze/shake leaks across rounds
             player.ResetForRound(-2.5f);
             enemy.ResetForRound(2.5f);
             if (enemyAi != null)
             {
+                enemyAi.Round = round;
                 enemyAi.ReactionDelay = round == 1 ? 0.32f : round == 2 ? 0.26f : 0.20f;
                 enemyAi.BlockRate = 0.45f + 0.10f * (round - 1);
+                enemyAi.ParryChance = round >= 2 ? 0.18f + 0.10f * (round - 2) : 0f;
+                enemyAi.DashChance = 0.10f + 0.05f * (round - 1);
             }
             TouchUI.I.SetRoundPips(playerRounds, enemyRounds);
             TouchUI.I.RefreshBars();
@@ -163,7 +180,6 @@ namespace KaijuRuin
                     yield break;
                 }
                 TouchUI.I.SetTimer(Mathf.CeilToInt(TimeLeft));
-                UpdateCamera();
                 yield return null;
             }
         }
@@ -195,12 +211,51 @@ namespace KaijuRuin
             yield return new WaitForSeconds(0.6f);
         }
 
+        // Clip-GLB set for a character (all share Kest's rig per D-011; AnimClipPrefix
+        // lets a future champion ship its own clips without touching this code).
+        static Dictionary<string, string> ClipFiles(CharacterDef def)
+        {
+            string p = def.AnimClipPrefix;
+            return new Dictionary<string, string> {
+                { "idle", p + "idle.glb" }, { "walk", p + "walk.glb" },
+                { "punch", p + "punch.glb" }, { "block", p + "block.glb" },
+                { "hit", p + "hit.glb" }, { "death", p + "death.glb" },
+            };
+        }
+
+        // Apply a CharacterDef's identity + feel knobs to a loaded fighter (D-017).
+        static Fighter ConfigureFighter(GameObject go, CharacterDef def, bool faceRight)
+        {
+            var f = go.AddComponent<Fighter>();
+            f.DisplayName = def.DisplayName;
+            f.Anim = go.GetComponent<FighterAnimator>();
+            f.Proc = go.AddComponent<ProcAnim>();
+            f.Proc.AmpMul = def.ProcAmp;
+            f.Proc.DurMul = def.ProcDur;
+            f.AttackSpeed = def.AttackSpeed;
+            f.WalkSpeed = def.WalkSpeed;
+            f.Theme = def.Theme;
+            f.SpecialSet = def.SpecialSet;
+            f.IconKey = def.IconKey;
+            f.FacingRight = faceRight;
+            return f;
+        }
+
         // Load impact VFX sprites once up front so the first hit of the match
         // doesn't pay a synchronous Resources.Load on the frame it lands.
         void Prewarm()
         {
-            foreach (var v in new[] { "hit_spark", "ink_blood", "kest_foxfire", "tengi_bladewave", "meter_flare", "kaiju_shockwave" })
-                AssetLib.Sprite("vfx/" + v, 256f);
+            foreach (var v in new[] { "hit_spark", "ink_blood", "kest_foxfire", "tengi_bladewave", "meter_flare",
+                                      "kaiju_shockwave", "dash_streak", "parry_spark", "impact_ring" })
+                if (AssetLib.Has("vfx/" + v)) AssetLib.Sprite("vfx/" + v, 256f);
+        }
+
+        // Camera runs every frame (not just in RunRound) so hit-stop shake and the
+        // KO punch still read during banners/freeze. Paused holds it entirely.
+        void Update()
+        {
+            if (cam == null || GameManager.Paused) return;
+            UpdateCamera();
         }
 
         void UpdateCamera()
@@ -210,7 +265,10 @@ namespace KaijuRuin
             float dist = Mathf.Abs(player.transform.position.x - enemy.transform.position.x);
             float z = Mathf.Lerp(-6.6f, -7.5f, Mathf.InverseLerp(2.5f, 7f, dist));   // 10% tighter when close
             var target = new Vector3(Mathf.Clamp(midX, -3.5f, 3.5f), 1.7f, z);
-            cam.transform.position = Vector3.Lerp(cam.transform.position, target, Time.deltaTime * 5f);
+            camBase = Vector3.Lerp(camBase, target, Time.deltaTime * 5f);
+            var pos = camBase + CombatFx.ShakeOffset();
+            pos.z += CombatFx.PunchZ();     // dolly toward the action on heavy impacts
+            cam.transform.position = pos;
         }
     }
 }

@@ -17,6 +17,28 @@ namespace KaijuRuin
             return t;
         }
 
+        // Silent existence check (no warning), memoized — used by graceful VFX
+        // fallbacks on the hit frame, so it must NOT re-run Resources.Load per call
+        // (mobile input-to-impact budget). Assets are baked into the build and never
+        // appear mid-run, so a whole-session cache is safe.
+        static readonly Dictionary<string, bool> existCache = new Dictionary<string, bool>();
+        public static bool Has(string path)
+        {
+            if (existCache.TryGetValue(path, out var v)) return v;
+            v = Resources.Load<Texture2D>("Art/" + path) != null;
+            existCache[path] = v;
+            return v;
+        }
+
+        // Prefer a dedicated asset if it has been generated, else a stand-in that
+        // ships today. Lets `planned` multiplayer art (ASSET_MANIFEST) drop in with
+        // ZERO code change once "generate necessary artwork" runs (D-017 art seam).
+        public static Sprite SpriteOr(string preferred, string fallback, float pixelsPerUnit = 100f)
+        {
+            if (Has(preferred)) return Sprite(preferred, pixelsPerUnit);
+            return fallback != null ? Sprite(fallback, pixelsPerUnit) : null;
+        }
+
         public static Sprite Sprite(string path, float pixelsPerUnit = 100f)
         {
             var key = path + "@" + pixelsPerUnit;

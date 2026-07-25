@@ -25,11 +25,59 @@ namespace KaijuRuin
         void ShowMenu()
         {
             var menu = gameObject.AddComponent<MainMenu>();
-            menu.Show(() =>
-            {
-                Destroy(menu);
-                StartFight(skipIntro: false);
-            });
+            menu.Show(
+                onSolo: () => { Destroy(menu); ShowCharacterSelect(GameMode.Solo); },
+                onMultiplayer: () => { Destroy(menu); ShowMultiplayer(); });
+        }
+
+        // Front-end flow (D-017):
+        //   Solo:   Menu -> CharacterSelect -> Fight
+        //   Online: Menu -> MultiplayerMenu -> CharacterSelect -> Lobby -> Fight
+        void ShowMultiplayer()
+        {
+            var mp = gameObject.AddComponent<MultiplayerMenu>();
+            mp.Show(
+                proceed: () => { Destroy(mp); ShowCharacterSelect(GameMode.Online); },
+                back: () => { Destroy(mp); ShowMenu(); });
+        }
+
+        void ShowCharacterSelect(GameMode mode)
+        {
+            var cs = gameObject.AddComponent<CharacterSelectMenu>();
+            cs.Show(mode,
+                confirm: (localId, oppId) =>
+                {
+                    Destroy(cs);
+                    if (mode == GameMode.Solo)
+                    {
+                        MatchConfig.SetSolo(localId, oppId);
+                        StartFight(skipIntro: false);
+                    }
+                    else
+                    {
+                        MatchConfig.LocalCharId = localId;
+                        MatchConfig.OpponentCharId = oppId;   // preference; the matchmaker may override
+                        ShowLobby();
+                    }
+                },
+                back: () =>
+                {
+                    Destroy(cs);
+                    if (mode == GameMode.Solo) ShowMenu(); else ShowMultiplayer();
+                });
+        }
+
+        void ShowLobby()
+        {
+            var lobby = gameObject.AddComponent<LobbyMenu>();
+            lobby.Show(
+                start: () =>
+                {
+                    Destroy(lobby);
+                    NetService.I?.OpenTransport();       // no-op under loopback; live path for a real backend
+                    StartFight(skipIntro: true);          // online skips the single-player story intro
+                },
+                back: () => { Destroy(lobby); ShowMultiplayer(); });
         }
 
         public void StartFight(bool skipIntro)
@@ -80,6 +128,7 @@ namespace KaijuRuin
         {
             StopAllCoroutines();
             CleanupFight();
+            NetService.I?.CloseTransport();   // release any online session before returning to the menu
             ShowMenu();
         }
     }

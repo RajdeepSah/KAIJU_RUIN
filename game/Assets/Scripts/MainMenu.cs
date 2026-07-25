@@ -8,7 +8,7 @@ namespace KaijuRuin
     {
         Canvas canvas;
 
-        public void Show(System.Action onPlay)
+        public void Show(System.Action onSolo, System.Action onMultiplayer)
         {
             AudioManager.I?.Music("title_theme");
             canvas = UiKit.NewCanvas("MainMenu", 20);
@@ -27,18 +27,26 @@ namespace KaijuRuin
             var subtitle = UiKit.Label(canvas.transform, "Subtitle", "SHADOW OF GIANTS", 52, AssetLib.DisplayFont, AssetLib.GoryoFlame);
             UiKit.Rect(subtitle.gameObject, new Vector2(0f, 0.38f), new Vector2(1f, 0.47f), Vector2.zero, Vector2.zero);
 
-            var play = UiKit.ButtonSprite(canvas.transform, "Play", AssetLib.UiSlice("plate_light"), "TAP TO FIGHT", AssetLib.HudFont, () =>
+            var solo = UiKit.ButtonSprite(canvas.transform, "Solo", AssetLib.UiSlice("plate_light"), "SOLO FIGHT", AssetLib.HudFont, () =>
             {
                 AudioManager.I?.Sfx("ui_tap");
                 Destroy(canvas.gameObject);
-                onPlay();
-            }, 52);
-            UiKit.Rect(play.gameObject, new Vector2(0.36f, 0.18f), new Vector2(0.64f, 0.34f), Vector2.zero, Vector2.zero);
+                onSolo();
+            }, 48);
+            UiKit.Rect(solo.gameObject, new Vector2(0.35f, 0.235f), new Vector2(0.65f, 0.335f), Vector2.zero, Vector2.zero);
+
+            var mp = UiKit.ButtonSprite(canvas.transform, "Multiplayer", AssetLib.UiSlice("plate_light"), "PLAY MULTIPLAYER", AssetLib.HudFont, () =>
+            {
+                AudioManager.I?.Sfx("ui_tap");
+                Destroy(canvas.gameObject);
+                onMultiplayer();
+            }, 44);
+            UiKit.Rect(mp.gameObject, new Vector2(0.35f, 0.12f), new Vector2(0.65f, 0.22f), Vector2.zero, Vector2.zero);
 
             var hint = UiKit.Label(canvas.transform, "Hint",
-                "Tap: light chain - Swipe: heavy - Hold: block - Cards: specials",
-                30, AssetLib.HudFont, AssetLib.BonePaper);
-            UiKit.Rect(hint.gameObject, new Vector2(0f, 0.09f), new Vector2(1f, 0.15f), Vector2.zero, Vector2.zero);
+                "Tap: chain - Swipe in: heavy - Up: launch - Down: sweep - Away: dodge - Hold: block/parry - Cards: specials",
+                24, AssetLib.HudFont, AssetLib.BonePaper);
+            UiKit.Rect(hint.gameObject, new Vector2(0f, 0.07f), new Vector2(1f, 0.11f), Vector2.zero, Vector2.zero);
 
             var version = UiKit.Label(canvas.transform, "Version",
                 "Shadow of Giants slice v0.1 - internal placeholder build",

@@ -32,6 +32,13 @@ namespace KaijuRuin
             Play("idle", 0f);
         }
 
+        // Hit-stop: pause clip evaluation so the whole fighter freezes on impact
+        // (CombatFx owns the freeze window; this only reflects it on the rig).
+        void Update()
+        {
+            if (anim != null) anim.enabled = !CombatFx.Frozen;
+        }
+
         public bool Has(string state) => states.ContainsKey(state);
 
         // Missing clips degrade per the design brief: special falls back to

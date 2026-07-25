@@ -150,8 +150,7 @@ namespace KaijuRuin
             {
                 bool towardOpponent = Player.Self.FacingRight ? delta.x > 0 : delta.x < 0;
                 if (towardOpponent) Player.HeavyAttack();
-                // Swipe away is intentionally a no-op (retreat is a left-half
-                // drag); it no longer commits a phantom jab + recovery lock.
+                else Player.BackDash();          // swipe away = evasive back-dash (D-016)
             }
         }
 

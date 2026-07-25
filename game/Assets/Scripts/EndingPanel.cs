@@ -13,10 +13,11 @@ namespace KaijuRuin
             AudioManager.I?.Sfx("ending_sting");
             var canvas = UiKit.NewCanvas("Ending", 40);
 
-            string panel = playerWon ? "panels/ending_kest_01" : "panels/ending_tengi_01";
-            string caption = playerWon
-                ? "The fox does not bury its dead. It multiplies them."
-                : "The culling spares no one. Not even the brave.";
+            // The Horrific Ending belongs to whoever WON, not a fixed player/enemy —
+            // so it reads correctly whichever champion each side chose (D-017).
+            var winner = playerWon ? MatchConfig.Local : MatchConfig.Opponent;
+            string panel = "panels/ending_" + winner.Id + "_01";
+            string caption = Caption(winner.Id);
 
             var img = UiKit.Image(canvas.transform, "Panel", AssetLib.Sprite(panel));
             img.preserveAspect = false;
@@ -56,6 +57,16 @@ namespace KaijuRuin
 
             if (rematch) GameManager.I.StartFight(skipIntro: true);
             else GameManager.I.BackToTitle();
+        }
+
+        static string Caption(string winnerId)
+        {
+            switch (winnerId)
+            {
+                case "kest": return "The fox does not bury its dead. It multiplies them.";
+                case "tengi": return "The culling spares no one. Not even the brave.";
+                default: return "The realm remembers only the last one standing.";
+            }
         }
     }
 }

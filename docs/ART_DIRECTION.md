@@ -38,6 +38,7 @@ Rule of thumb: a frame is ~70% Sumi/Ash, ~20% Bone, ~10% accents. Blood Seal and
 - Type: condensed grotesque sans for HUD and numbers; rough brush display face for titles and Horrific Ending captions. Fonts are tracked assets with license fields — see ASSET_MANIFEST.md §Fonts.
 - Every tap answers visually within 80 ms (Pillar 3) — ink-splash or flash, no easing delays on input feedback.
 - Icons: single-weight ink glyphs, no gradients, readable at 24dp.
+- Multiplayer front-end (mode select, character select, room/lobby) keeps the same comic-panel language: roster slots are ink cards (`ui_roster_card`), the screens share one brooding backdrop (`ui_menu_bg`), room codes render in the rough brush display face. New champions surface automatically from the data-driven roster (D-017), so their select/VS/HUD art is nothing more than the per-character rows already templated in ASSET_MANIFEST.
 
 ## 4. Asset pipeline (generate → place → replace)
 

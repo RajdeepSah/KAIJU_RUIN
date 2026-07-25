@@ -13,6 +13,8 @@ Thumbs.db
 [Bb]uilds/
 [Ll]ogs/
 [Uu]serSettings/
+[Uu]tmp/
+.utmp/
 [Mm]emoryCaptures/
 [Rr]ecordings/
 .vs/
@@ -25,6 +27,7 @@ Thumbs.db
 *.user
 sysinfo.txt
 crashlytics-build.properties
+mono_crash.*
 
 # Build outputs
 *.apk

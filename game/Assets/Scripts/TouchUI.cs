@@ -36,6 +36,14 @@ namespace KaijuRuin
         Image vsImage;
         GameObject pauseOverlay;
 
+        // Session 5 (D-015): combo counter + parry cue (share one transient label).
+        Text comboText;
+        int comboCount;
+        float cueUntil;
+        Image parryFlash;
+        float parryFlashV;
+        float lastPlayerHp = Fighter.MaxHp;
+
         // Every interactive rect the gesture layer must NOT treat as an attack.
         readonly List<RectTransform> uiHitRects = new List<RectTransform>();
 
@@ -47,12 +55,19 @@ namespace KaijuRuin
             var hud = AssetLib.HudFont;
             var display = AssetLib.DisplayFont;
 
+            // Parry flash: a faint full-screen tint (added first so it sits behind
+            // every other HUD element). Alpha driven from OnParry.
+            parryFlash = UiKit.Image(canvas.transform, "ParryFlash", UiKit.WhiteSprite(), new Color(AssetLib.GoryoFlame.r, AssetLib.GoryoFlame.g, AssetLib.GoryoFlame.b, 0f));
+            parryFlash.preserveAspect = false;
+            parryFlash.raycastTarget = false;
+            UiKit.Rect(parryFlash.gameObject, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
             // Health bars (with ghost drain)
             HealthBar(true);
             HealthBar(false);
-            var pName = UiKit.Label(canvas.transform, "PName", "KEST", 34, hud, AssetLib.BonePaper, TextAnchor.MiddleLeft);
+            var pName = UiKit.Label(canvas.transform, "PName", playerF.DisplayName, 34, hud, AssetLib.BonePaper, TextAnchor.MiddleLeft);
             UiKit.Rect(pName.gameObject, new Vector2(0.05f, 0.86f), new Vector2(0.3f, 0.90f), Vector2.zero, Vector2.zero);
-            var eName = UiKit.Label(canvas.transform, "EName", "TENGI", 34, hud, AssetLib.BonePaper, TextAnchor.MiddleRight);
+            var eName = UiKit.Label(canvas.transform, "EName", enemyF.DisplayName, 34, hud, AssetLib.BonePaper, TextAnchor.MiddleRight);
             UiKit.Rect(eName.gameObject, new Vector2(0.7f, 0.86f), new Vector2(0.95f, 0.90f), Vector2.zero, Vector2.zero);
 
             // Timer
@@ -75,7 +90,7 @@ namespace KaijuRuin
             // name) — 3 cells in Blood Seal so the player can anticipate Tengi's
             // specials (they fire with no telegraph).
             BuildMeter(enemyMeter, new Vector2(0.555f, 0.893f), new Vector2(0.79f, 0.907f), AssetLib.BloodSeal);
-            var eMeterLabel = UiKit.Label(canvas.transform, "EMeterLabel", "TENGI METER", 16, hud, AssetLib.AshSteel, TextAnchor.MiddleLeft);
+            var eMeterLabel = UiKit.Label(canvas.transform, "EMeterLabel", enemyF.DisplayName + " METER", 16, hud, AssetLib.AshSteel, TextAnchor.MiddleLeft);
             UiKit.Rect(eMeterLabel.gameObject, new Vector2(0.555f, 0.876f), new Vector2(0.79f, 0.893f), Vector2.zero, Vector2.zero);
 
             // Chain step pips (1-2-3), above the player meter; light per landed hit.
@@ -107,7 +122,7 @@ namespace KaijuRuin
                 btn.transition = Selectable.Transition.None;
                 btn.onClick.AddListener(() => pc.CastSpecial(s));   // CastSpecial owns feedback
 
-                var icon = UiKit.Image(frame.transform, "CardIcon" + slot, AssetLib.UiSlice("icon_kest_" + slot));
+                var icon = UiKit.Image(frame.transform, "CardIcon" + slot, AssetLib.UiSlice(playerF.IconKey + "_" + slot));
                 UiKit.Rect(icon.gameObject, new Vector2(0.16f, 0.18f), new Vector2(0.84f, 0.82f), Vector2.zero, Vector2.zero);
                 icon.raycastTarget = false;
                 cardIcons.Add(icon);
@@ -140,6 +155,12 @@ namespace KaijuRuin
             bannerText = UiKit.Label(canvas.transform, "Banner", "", 110, display, AssetLib.BonePaper);
             UiKit.Rect(bannerText.gameObject, new Vector2(0f, 0.4f), new Vector2(1f, 0.6f), Vector2.zero, Vector2.zero);
             bannerDim.gameObject.SetActive(false);
+
+            // Combo / parry cue — center-upper, transient, never blocks touches.
+            comboText = UiKit.Label(canvas.transform, "Combo", "", 56, display, AssetLib.SignalAmber);
+            comboText.raycastTarget = false;
+            UiKit.Rect(comboText.gameObject, new Vector2(0.3f, 0.62f), new Vector2(0.7f, 0.74f), Vector2.zero, Vector2.zero);
+            SetCueAlpha(0f);
 
             RefreshBars();
         }
@@ -210,6 +231,9 @@ namespace KaijuRuin
         public void RefreshBars()
         {
             if (player == null || enemy == null) return;
+            // Taking a clean hit breaks the player's combo streak.
+            if (player.Hp < lastPlayerHp - 0.5f) ResetCombo();
+            lastPlayerHp = player.Hp;
             float pHp = player.Hp / Fighter.MaxHp;
             float eHp = enemy.Hp / Fighter.MaxHp;
             if (playerHp != null) playerHp.fillAmount = pHp;
@@ -272,6 +296,24 @@ namespace KaijuRuin
                     {
                         var c = chainPips[i].color; c.a = Mathf.MoveTowards(c.a, 0.18f, Time.deltaTime * 2f); chainPips[i].color = c;
                     }
+
+            // Combo / parry cue fade (snap in, ease out; clear text once faded).
+            if (comboText != null)
+            {
+                float target = Time.time < cueUntil ? 1f : 0f;
+                float a = Mathf.MoveTowards(comboText.color.a, target, Time.deltaTime * (target > 0f ? 8f : 3f));
+                SetCueAlpha(a);
+                // Once faded out, clear the label AND the streak — the combo counter
+                // reflects a live streak, not lifetime hits.
+                if (a <= 0.01f && Time.time >= cueUntil) { if (comboText.text.Length > 0) comboText.text = ""; comboCount = 0; }
+            }
+
+            // Parry screen flash decay.
+            if (parryFlash != null)
+            {
+                parryFlashV = Mathf.MoveTowards(parryFlashV, 0f, Time.deltaTime * 1.8f);
+                var pc = parryFlash.color; pc.a = parryFlashV; parryFlash.color = pc;
+            }
         }
 
         public void SetTimer(int seconds)
@@ -298,6 +340,44 @@ namespace KaijuRuin
                     ? AssetLib.GoryoFlame
                     : new Color(1, 1, 1, 0.18f);
             }
+        }
+
+        // A clean hit landed. Player hits build the combo counter; if the player
+        // is the one struck, the combo drops (also handled in RefreshBars).
+        public void OnHitLanded(Fighter attacker)
+        {
+            if (attacker == null) return;
+            if (attacker == player)
+            {
+                comboCount++;
+                if (comboCount >= 2) ShowCue(comboCount + " HITS", AssetLib.SignalAmber, 1.4f);
+            }
+        }
+
+        // A perfect guard. The player's parry gets a screen flash + cue.
+        public void OnParry(Fighter defender)
+        {
+            if (defender == player)
+            {
+                ShowCue("PARRY!", AssetLib.GoryoFlame, 0.8f);
+                parryFlashV = 0.35f;   // brief, non-intrusive full-screen tint
+            }
+        }
+
+        void ResetCombo() { comboCount = 0; }
+
+        void ShowCue(string text, Color color, float seconds)
+        {
+            if (comboText == null) return;
+            comboText.text = text;
+            comboText.color = new Color(color.r, color.g, color.b, 1f);
+            cueUntil = Time.time + seconds;
+        }
+
+        void SetCueAlpha(float a)
+        {
+            if (comboText == null) return;
+            var c = comboText.color; c.a = a; comboText.color = c;
         }
 
         public void TouchFeedback(Vector2 screenPos, bool leftZone)
@@ -332,6 +412,8 @@ namespace KaijuRuin
 
         public void SetRoundPips(int playerRounds, int enemyRounds)
         {
+            ResetCombo();
+            lastPlayerHp = Fighter.MaxHp;
             for (int i = 0; i < 2; i++)
             {
                 bool pLit = i < playerRounds, eLit = i < enemyRounds;
@@ -354,9 +436,9 @@ namespace KaijuRuin
             vsImage = UiKit.Image(canvas.transform, "VsScreen", AssetLib.Sprite("ui/vs_screen"));
             vsImage.preserveAspect = false;
             UiKit.Rect(vsImage.gameObject, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            var pPortrait = UiKit.Image(vsImage.transform, "P", AssetLib.Sprite("characters/kest_portrait"));
+            var pPortrait = UiKit.Image(vsImage.transform, "P", AssetLib.Sprite(MatchConfig.Local.PortraitPath));
             UiKit.Rect(pPortrait.gameObject, new Vector2(0.06f, 0.25f), new Vector2(0.42f, 0.85f), Vector2.zero, Vector2.zero);
-            var ePortrait = UiKit.Image(vsImage.transform, "E", AssetLib.Sprite("characters/tengi_portrait"));
+            var ePortrait = UiKit.Image(vsImage.transform, "E", AssetLib.Sprite(MatchConfig.Opponent.PortraitPath));
             UiKit.Rect(ePortrait.gameObject, new Vector2(0.58f, 0.25f), new Vector2(0.94f, 0.85f), Vector2.zero, Vector2.zero);
             var vs = UiKit.Label(vsImage.transform, "VS", "VS", 160, AssetLib.DisplayFont, AssetLib.BonePaper);
             UiKit.Rect(vs.gameObject, new Vector2(0.4f, 0.35f), new Vector2(0.6f, 0.65f), Vector2.zero, Vector2.zero);

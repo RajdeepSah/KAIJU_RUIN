@@ -163,6 +163,41 @@ namespace KaijuRuin
             rt.anchoredPosition = screenPos / sf;
             img.gameObject.AddComponent<UiFade>();
         }
+
+        // Bone-Paper text field for room-code entry (legacy uGUI InputField, built
+        // in code like everything else). The caret is created by Unity on focus.
+        public static InputField CodeInput(Transform parent, string name, string placeholder, int charLimit, Font font)
+        {
+            var go = new GameObject(name, typeof(Image), typeof(InputField));
+            go.transform.SetParent(parent, false);
+            var bg = go.GetComponent<Image>();
+            bg.sprite = WhiteSprite();
+            bg.color = AssetLib.BonePaper;
+
+            var textGo = new GameObject("Text", typeof(Text));
+            textGo.transform.SetParent(go.transform, false);
+            var text = textGo.GetComponent<Text>();
+            text.font = font; text.fontSize = 48; text.color = AssetLib.SumiInk;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.supportRichText = false;
+            Rect(textGo, Vector2.zero, Vector2.one, new Vector2(14, 6), new Vector2(-14, -6));
+
+            var phGo = new GameObject("Placeholder", typeof(Text));
+            phGo.transform.SetParent(go.transform, false);
+            var ph = phGo.GetComponent<Text>();
+            ph.font = font; ph.fontSize = 40; ph.color = new Color(0.28f, 0.30f, 0.34f, 0.7f);
+            ph.alignment = TextAnchor.MiddleCenter; ph.text = placeholder; ph.raycastTarget = false;
+            Rect(phGo, Vector2.zero, Vector2.one, new Vector2(14, 6), new Vector2(-14, -6));
+
+            var input = go.GetComponent<InputField>();
+            input.textComponent = text;
+            input.placeholder = ph;
+            input.characterLimit = charLimit;
+            input.text = "";
+            input.characterValidation = InputField.CharacterValidation.None;
+            input.contentType = InputField.ContentType.Standard;
+            return input;
+        }
     }
 
     // One-shot UI graphic: expand + fade, then destroy. Uses unscaled time so
