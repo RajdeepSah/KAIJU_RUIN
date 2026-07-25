@@ -15,7 +15,7 @@
 - `assets/` — engine-agnostic master art/audio. Source of truth, tracked in ASSET_MANIFEST.md.
 - `scripts/` — repo maintenance checks (`check_docs_fresh.sh`, `check_manifest.sh`); the assets→game sync script joins them at scaffold time.
 - `game/` — the Unity project (scaffolded 2026-07-18 from DESIGN_BRIEF.md).
-  - `game/Assets/Scripts/` — 32 C# files, everything built code-first from a near-empty Boot scene (no hand-authored prefabs). Includes the multiplayer front-end + networking seam (D-017).
+  - `game/Assets/Scripts/` — 34 C# files, everything built code-first from a near-empty Boot scene (no hand-authored prefabs). Includes the multiplayer front-end + networking seam (D-017) and the onboarding front end (D-022).
   - `game/Assets/Resources/{Art,Audio,Fonts}` — one-way synced copies of `assets/` masters via `scripts/sync_assets.sh` (concept art excluded; textures load as Texture2D, sprites created at runtime).
   - `game/Assets/StreamingAssets/Models/` — rigged GLBs + animation clip GLBs, loaded at runtime by glTFast.
   - Slice deviations from production intent (Built-in RP instead of URP; legacy-Animation playback of the D-011 clips because AnimatorController authoring is editor-only) are documented in `game/README.md`.
@@ -40,7 +40,7 @@ Built as a **seam, not a service** — the game still builds to a local APK and 
 - **Live backend = drop-in.** Implement `RelayMatchmaker` / `RelayTransport` (stubbed with the integration steps: Unity Authentication + Lobby + Matchmaker + Relay + Unity Transport; **input-lockstep** fits the deterministic X-axis sim, with host-authoritative state sync as the fallback if `Time.time`/`Random` determinism proves fragile) and flip `NetService.Backend` to `Relay`. Zero UI or fight changes.
 - **Roster is data.** `CharacterRoster`/`CharacterDef` hold every per-champion value; `RoundManager` spawns both fighters from `MatchConfig` via the roster, and `CombatSystem.Special(set, slot)` selects cards by set — so `PlayerController`/`EnemyAI` are champion-agnostic. **Add a champion = add one `CharacterDef`** (+ its art rows).
 - **Control assignment (in `RoundManager`).** Local player → `PlayerController` + `TouchInput`. Opponent → `EnemyAI` (solo + loopback online) *or* `RemoteController` (a real transport is connected) which replays remote `FighterInputCmd` through the same `PlayerController` verbs with `Local = false` (never touches the local HUD). `NetInputRelay` is the local send counterpart. Fighters are parented under the fight root so cleanup survives mirror matches.
-- **Front-end flow.** Solo: Menu → CharacterSelect → Fight. Online: Menu → MultiplayerMenu → CharacterSelect → Lobby → Fight. `MatchConfig` is the shared blackboard (defaults reproduce the original single-player fight).
+- **Front-end flow** (restructured by **D-022**; `GameManager` owns it). First run: buttonless **Title** → **StoryIntro** (7 lore beats, skippable, once per install via a `PlayerPrefs` flag) → **HowToPlay** → **FightSelect**. Afterwards: Title → FightSelect. Then Solo: FightSelect → CharacterSelect → Fight. Online: FightSelect → MultiplayerMenu → CharacterSelect → Lobby → Fight. Ending → Title. The intro is a **front-end** step, no longer part of `FightFlow` (so it plays once, on both paths, instead of before every solo fight); `HowToPlay` and `REPLAY STORY` keep both onboarding steps reachable from FightSelect. `MatchConfig` is the shared blackboard (defaults reproduce the original single-player fight).
 
 ## Testing intent (expand when code exists)
 

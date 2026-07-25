@@ -3,7 +3,13 @@ using UnityEngine;
 
 namespace KaijuRuin
 {
-    // Session state machine: Menu -> StoryIntro -> Fight -> Ending -> Menu.
+    // Session state machine (D-022):
+    //   first run: Title -> StoryIntro -> HowToPlay -> FightSelect -> ...
+    //   later:     Title -> FightSelect -> ...
+    //   Solo:      FightSelect -> CharacterSelect -> Fight -> Ending -> Title
+    //   Online:    FightSelect -> MultiplayerMenu -> CharacterSelect -> Lobby -> Fight
+    // The story intro sits in the FRONT END, before character select, so it plays
+    // once on both paths instead of once per solo fight.
     public class GameManager : MonoBehaviour
     {
         public static GameManager I { get; private set; }
@@ -20,25 +26,68 @@ namespace KaijuRuin
 
         void Awake() { I = this; }
 
-        void Start() { ShowMenu(); }
+        void Start() { ShowTitle(); }
 
-        void ShowMenu()
+        // Buttonless title screen: tap anywhere to enter the front end.
+        void ShowTitle()
         {
             var menu = gameObject.AddComponent<MainMenu>();
-            menu.Show(
-                onSolo: () => { Destroy(menu); ShowCharacterSelect(GameMode.Solo); },
-                onMultiplayer: () => { Destroy(menu); ShowMultiplayer(); });
+            menu.Show(onContinue: () => { Destroy(menu); AfterTitle(); });
         }
 
-        // Front-end flow (D-017):
-        //   Solo:   Menu -> CharacterSelect -> Fight
-        //   Online: Menu -> MultiplayerMenu -> CharacterSelect -> Lobby -> Fight
+        void AfterTitle()
+        {
+            if (StoryIntro.Seen) ShowFightSelect();
+            else StartCoroutine(FirstRunOnboarding());
+        }
+
+        // Once per install (StoryIntro.Seen is a PlayerPref), and skippable at any
+        // beat. Both entry points stay on FightSelectMenu afterwards.
+        IEnumerator FirstRunOnboarding()
+        {
+            yield return PlayStoryIntro();
+            ShowHowToPlay(then: ShowFightSelect);
+        }
+
+        IEnumerator PlayStoryIntro()
+        {
+            var intro = gameObject.AddComponent<StoryIntro>();
+            yield return intro.Run();
+            Destroy(intro);
+        }
+
+        IEnumerator ReplayStoryIntro()
+        {
+            yield return PlayStoryIntro();
+            ShowFightSelect();
+        }
+
+        // Layered over whatever is underneath (its own dim blocks input), so the
+        // fight-select screen does not need tearing down to show the primer.
+        void ShowHowToPlay(System.Action then)
+        {
+            if (GetComponent<HowToPlay>() != null) return;   // one primer at a time
+            var hp = gameObject.AddComponent<HowToPlay>();
+            hp.Show(() => { Destroy(hp); then?.Invoke(); });
+        }
+
+        void ShowFightSelect()
+        {
+            var fs = gameObject.AddComponent<FightSelectMenu>();
+            fs.Show(
+                onSolo: () => { Destroy(fs); ShowCharacterSelect(GameMode.Solo); },
+                onMultiplayer: () => { Destroy(fs); ShowMultiplayer(); },
+                onHowToPlay: () => ShowHowToPlay(then: null),
+                onReplayStory: () => { Destroy(fs); StartCoroutine(ReplayStoryIntro()); },
+                back: () => { Destroy(fs); ShowTitle(); });
+        }
+
         void ShowMultiplayer()
         {
             var mp = gameObject.AddComponent<MultiplayerMenu>();
             mp.Show(
                 proceed: () => { Destroy(mp); ShowCharacterSelect(GameMode.Online); },
-                back: () => { Destroy(mp); ShowMenu(); });
+                back: () => { Destroy(mp); ShowFightSelect(); });
         }
 
         void ShowCharacterSelect(GameMode mode)
@@ -51,7 +100,7 @@ namespace KaijuRuin
                     if (mode == GameMode.Solo)
                     {
                         MatchConfig.SetSolo(localId, oppId);
-                        StartFight(skipIntro: false);
+                        StartFight();
                     }
                     else
                     {
@@ -63,7 +112,7 @@ namespace KaijuRuin
                 back: () =>
                 {
                     Destroy(cs);
-                    if (mode == GameMode.Solo) ShowMenu(); else ShowMultiplayer();
+                    if (mode == GameMode.Solo) ShowFightSelect(); else ShowMultiplayer();
                 });
         }
 
@@ -75,26 +124,21 @@ namespace KaijuRuin
                 {
                     Destroy(lobby);
                     NetService.I?.OpenTransport();       // no-op under loopback; live path for a real backend
-                    StartFight(skipIntro: true);          // online skips the single-player story intro
+                    StartFight();
                 },
                 back: () => { Destroy(lobby); ShowMultiplayer(); });
         }
 
-        public void StartFight(bool skipIntro)
+        // No intro gate any more: the story intro is a front-end step (D-022), so a
+        // fight (or a rematch) starts straight into the match.
+        public void StartFight()
         {
-            StartCoroutine(FightFlow(skipIntro));
+            StartCoroutine(FightFlow());
         }
 
-        IEnumerator FightFlow(bool skipIntro)
+        IEnumerator FightFlow()
         {
             CleanupFight();   // never stack a second fight on the old one (rematch)
-
-            if (!skipIntro)
-            {
-                var intro = gameObject.AddComponent<StoryIntro>();
-                yield return intro.Run();
-                Destroy(intro);
-            }
 
             fightRoot = new GameObject("Fight");
             var rm = fightRoot.AddComponent<RoundManager>();
@@ -129,7 +173,7 @@ namespace KaijuRuin
             StopAllCoroutines();
             CleanupFight();
             NetService.I?.CloseTransport();   // release any online session before returning to the menu
-            ShowMenu();
+            ShowTitle();
         }
     }
 }

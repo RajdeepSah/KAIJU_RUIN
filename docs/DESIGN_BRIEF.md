@@ -81,7 +81,7 @@ State machine in EnemyAI.cs: APPROACH (walk to 1.4 m), POKE (lights/heavy mix, 6
 
 ## ROUND / MATCH STRUCTURE
 
-- Session flow: Boot -> Main menu -> Story intro (3 motion-comic panels, tap to advance) -> Match -> Ending panel -> back to menu.
+- Session flow (**amended session 8b, D-022**): Boot -> **Title screen (buttonless, tap anywhere)** -> **Story intro (7 world/lore beats, tap to advance, SKIP any time - shown ONCE per install, before character select on both the solo and the multiplayer path)** -> **How to play (controls primer, once; re-openable from fight select)** -> **Fight select (SOLO FIGHT / PLAY MULTIPLAYER + HOW TO PLAY + REPLAY STORY)** -> [multiplayer only: Multiplayer hub] -> Character select -> [multiplayer only: Lobby] -> Match -> Ending panel -> back to the title screen. Returning runs go Title -> Fight select directly; the intro no longer replays per solo fight (it used to run inside the fight flow). *Superseded: the original "Boot -> Main menu -> Story intro (3 motion-comic panels) -> Match" line.*
 - Match: best-of-3 rounds, 60 s timer per round. Round ends on KO or timeout (higher remaining HP wins the round).
 - Round banners: "ROUND ONE" / "ROUND TWO" / "FINAL ROUND" then "FIGHT". KO shows "K.O."; timeout shows "TIME".
 - LIVING STAGE EVENT (interview decision): after round 1 ends, a scripted cutaway plays - khulandra_breach sprite rises behind the midground with roar SFX and vfx_kaiju_shockwave, banner "KHULANDRA RISES", and the ground layer swaps from harbor_ground to harbor_ground_flooded for the rest of the match. Fighters wade: walk speed -10 percent, splash particles on movement. Kaiju stays frame-breaking scale (Pillar 2) - only the breach sprite, never a full body.
@@ -119,8 +119,10 @@ All generated with Higgsfield in this build and saved per D-007 containers (musi
 
 ## UI (all strings literal, English; fonts: hud.ttf = Barlow Condensed SemiBold, display.ttf = Shojumaru)
 
-- Main menu: background key_art.png; emblem.png centered top; title "REALM OF GORYO" (display font); subtitle "SHADOW OF GIANTS"; button "TAP TO FIGHT"; hint line "Tap: light chain - Swipe: heavy - Hold: block - Cards: specials"; version line "Shadow of Giants slice v0.1 - internal placeholder build".
-- Story intro: the three story_fourpillars panels full-screen, caption strip at the bottom, "TAP TO CONTINUE" bottom-right, "SKIP" top-right.
+- Title screen (**amended session 8b, D-022 — no buttons**): background key_art.png; emblem.png centered top; title "REALM OF GORYO" (display font); subtitle "SHADOW OF GIANTS"; pulsing prompt "TAP ANYWHERE TO BEGIN"; version line "Shadow of Giants slice v0.1 - internal placeholder build". The whole key art is the tap target. Mode buttons and the control hint line moved to fight select / how to play.
+- Fight select (**new, D-022**): menu_bg backdrop, title "CHOOSE YOUR FIGHT", plates "SOLO FIGHT" and "PLAY MULTIPLAYER", secondary plates "HOW TO PLAY" and "REPLAY STORY", the control hint line, version line, "BACK" (to the title screen).
+- Story intro (**amended session 8b, D-022**): 7 full-screen beats — 2061 / THE FOUR PILLARS / TOKYO HARBOR / THE KAIJU / THE POWERS / THE CHAMPIONS / SHADOW OF GIANTS — each with an eyebrow heading + a caption strip at the bottom, progress pips bottom-left, "TAP TO CONTINUE" bottom-right, "SKIP" top-right. Art is existing placeholders (key_art, the three story_fourpillars panels, menu_bg, vs_screen, harbor_sky + the khulandra_breach cut-out overflowing the frame per Pillar 2). Beat text is a plain-language digest of LORE_BIBLE v1 §2–§6 — every claim traces to a `[CONFIRMED]` line, no invented canon; it is the single place to correct when the Lore Bible reaches v2.
+- How to play (**new, D-022**): ink panel over a blocking dim, heading "HOW TO PLAY", lead "One thumb. The screen is split: move on the left, fight on the right.", two columns of control lines mirroring TOUCH CONTROLS + MOVES v2, a Khulandra/living-stage note, button "GOT IT". Auto-opens once after the intro; re-openable from fight select.
 - HUD: two health bars top (hud_healthbar.png frames, Bone fill draining to reveal Blood Seal), fighter names "KEST" (left) and "TENGI" (right), round pips (2 per side), center timer counting 60 to 0, meter bar bottom-left (hud_meter.png, Goryo Flame fill), three ability cards bottom-right (ability_card.png frame + ability_icons_kest tiles), PAUSE button top-right (icon_sheet glyph).
 - Banners (display font, full width): "ROUND ONE", "ROUND TWO", "FINAL ROUND", "FIGHT", "K.O.", "TIME", "KHULANDRA RISES".
 - Pause overlay: panel_frame.png, "PAUSED", buttons "RESUME" and "QUIT TO TITLE".
@@ -134,7 +136,8 @@ game/
 ├── Assets/
 │   ├── Scripts/        Bootstrap.cs, GameManager.cs, RoundManager.cs, PlayerController.cs,
 │   │                   EnemyAI.cs, CombatSystem.cs, StageManager.cs, TouchInput.cs, TouchUI.cs,
-│   │                   GltfCharacterLoader.cs, StoryIntro.cs, EndingPanel.cs, AudioManager.cs, MainMenu.cs
+│   │                   GltfCharacterLoader.cs, StoryIntro.cs, EndingPanel.cs, AudioManager.cs, MainMenu.cs,
+│   │                   FightSelectMenu.cs, HowToPlay.cs (D-022) + the D-017 multiplayer front-end/net seam
 │   ├── Art/            synced copies of assets/ (concept excluded), via scripts/sync_assets.sh
 │   ├── Models/         kest_model.glb, tengi_model.glb + animation clip GLBs
 │   ├── Audio/          music/, sfx/, vo/
@@ -159,5 +162,5 @@ A complete `game/` Unity project folder plus README with exact local build steps
 - Kest is the player character; Tengi is AI (max contrast per Vision Goal 1; reversing is a one-line change).
 - 1000 HP / 60 s rounds / damage numbers above are first-pass tuning targets, expected to move in playtest.
 - Announcer voice is a single deep grave male-read voice; swap by regenerating with another seed_audio preset.
-- Story intro uses the three existing Four Pillars panels with short original captions; full Act 1 chapters remain future work.
+- Story intro uses the three existing Four Pillars panels with short original captions; full Act 1 chapters remain future work. **Amended D-022:** it now runs 7 beats over existing placeholder art (the three panels plus key_art, menu_bg, vs_screen, harbor_sky + khulandra_breach) and is front-end, once-per-install, and skippable; full Act 1 chapters are still future work.
 - Walk-speed penalty in flood state is 10 percent (readable but not punishing).

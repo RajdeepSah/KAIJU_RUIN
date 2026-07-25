@@ -131,3 +131,24 @@ What now constrains future work:
 - Extra combat VFX were **not** generated (owner: existing sprite tints cover them, per session-5 posture).
 
 Validated: all 32 scripts compile clean under Unity 6000.0.78f1 Roslyn (0 errors) after the `ClipFiles` edit. On-device visual confirmation of the special clip's retarget onto both champions is the owner's step.
+
+## D-022 — Front-end onboarding flow: buttonless title, once-only story intro, how-to-play primer (2026-07-25, accepted — owner directive)
+
+The owner specified the session flow as **Title (no buttons) → Story intro (world/lore beats + key art, familiarising the player with the setting) → How-to-play button → Fight select (solo / room) → Character select → Lobby → Fight**, with the intro shown **once before character select on both the solo and the multiplayer path**, always **skippable**, built from **existing generated art**, and tied to **Lore Bible v1**.
+
+Implemented as a front-end restructure (no fight-sim, networking, or asset changes):
+
+- **`MainMenu` is now a buttonless title screen.** Key art + emblem + title/subtitle + a pulsing "TAP ANYWHERE TO BEGIN"; the key-art image itself is the tap target (`Button` with `Transition.None`, emblem `raycastTarget = false` so it cannot punch a dead spot). The mode buttons and the control hint line moved off it.
+- **New `FightSelectMenu`** carries what the title screen used to: `SOLO FIGHT` / `PLAY MULTIPLAYER`, plus the two onboarding entry points — `HOW TO PLAY` and `REPLAY STORY`. Rationale: a once-only intro must stay reachable, and the owner's playtest needs to re-watch it after the first run. The D-017 scaling rule is unchanged (a new mode = one more button here).
+- **`StoryIntro` moved from the fight flow to the front end and grew to 7 lore beats** (2061 / THE FOUR PILLARS / TOKYO HARBOR / THE KAIJU / THE POWERS / THE CHAMPIONS / SHADOW OF GIANTS): eyebrow heading + wrapped caption strip, progress pips, per-beat fade (which doubles as the tap debounce), `SKIP` at any beat. It was previously run *inside* `GameManager.FightFlow` behind a `skipIntro` flag — i.e. replayed before every solo fight and never shown online. `StartFight(bool skipIntro)` is now `StartFight()`; `EndingPanel`'s rematch call follows.
+- **Shown once per install**, gated on `StoryIntro.Seen` (a `PlayerPrefs` flag, set even when skipped). Because the intro now sits between the title and fight select, "once" and "before character select on both paths" are the same placement — no per-path duplication.
+- **New `HowToPlay`** controls primer (ink panel over a raycast-blocking dim, own canvas above the front-end screens): auto-opens once right after the intro, and is re-openable from fight select *without* tearing that screen down. Content mirrors DESIGN_BRIEF TOUCH CONTROLS + MOVES v2 — keep the two in sync when a binding changes.
+- **New `UiKit.UiPulse`** (unscaled-time alpha breathe) so the buttonless title's prompt reads as live.
+
+Content and art constraints honoured:
+
+- **No new assets generated** (owner: "use existing generated art for now"). The beats reuse `ui/key_art`, the three `panels/story_fourpillars_*`, `ui/menu_bg`, `ui/vs_screen`, and `stages/harbor_sky` + the `stages/khulandra_breach` cut-out. Manifest consumer notes updated on those rows; **no new manifest rows, no credits spent** (1761 unchanged).
+- **Pillar 2 respected:** the Khulandra overlay is deliberately laid out taller than the screen (`0 → 1.25` vertical anchors, `preserveAspect`) so the kaiju is cropped by the frame rather than contained in it.
+- **Pillar 1 / ground rule 2 respected:** every beat line traces to a `[CONFIRMED]` statement in `LORE_BIBLE.md` v1 §2–§6 (2061 Japan overrun and threats from ocean and distant planets; the world uniting while Japan avoids a world war; Mu risen, the caudatas of Anquisheng, Sato's Ark in Tokyo; Goryo / Khulandra / Raisha; Kest's run to the kaiju graveyard to unleash Raisha; Tengi's culling to prepare the world). **No canon is invented**; the depictions remain `[INFERENCE]` placeholders. The beat table in `StoryIntro.cs` is the single correction point when the Lore Bible reaches **v2**.
+
+Consequences for future work: the front end is now four screens deep before a fight, so any new mode/onboarding step goes on `FightSelectMenu`, not the title. The intro's once-only gate is a `PlayerPrefs` key (`kr.storyintro.seen`) — clearing app data (or `REPLAY STORY`) is how it is re-seen. Validated: all **34 scripts** compile clean under Unity 6000.0.78f1 Roslyn (0 errors). The visual read of the new screens on a phone is the owner's on-device step.

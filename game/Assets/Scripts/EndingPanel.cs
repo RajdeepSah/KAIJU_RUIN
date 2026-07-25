@@ -55,7 +55,7 @@ namespace KaijuRuin
             while (!done) yield return null;
             Object.Destroy(canvas.gameObject);
 
-            if (rematch) GameManager.I.StartFight(skipIntro: true);
+            if (rematch) GameManager.I.StartFight();
             else GameManager.I.BackToTitle();
         }
 

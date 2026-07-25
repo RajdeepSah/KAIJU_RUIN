@@ -200,6 +200,25 @@ namespace KaijuRuin
         }
     }
 
+    // Slow alpha breathe for "tap anywhere" style prompts (the title screen is
+    // buttonless, so the prompt has to read as live). Unscaled time: front-end
+    // screens run with the fight's timeScale, which can be 0.
+    public class UiPulse : MonoBehaviour
+    {
+        public float Period = 1.6f;
+        public float Min = 0.35f, Max = 1f;
+        Graphic g;
+        float t;
+        void Awake() { g = GetComponent<Graphic>(); }
+        void Update()
+        {
+            if (g == null) return;
+            t += Time.unscaledDeltaTime;
+            float k = 0.5f - 0.5f * Mathf.Cos(t / Mathf.Max(0.01f, Period) * 2f * Mathf.PI);
+            var c = g.color; c.a = Mathf.Lerp(Min, Max, k); g.color = c;
+        }
+    }
+
     // One-shot UI graphic: expand + fade, then destroy. Uses unscaled time so
     // touch feedback still animates if the game is paused mid-gesture.
     public class UiFade : MonoBehaviour
