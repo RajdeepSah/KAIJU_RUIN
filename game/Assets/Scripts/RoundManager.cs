@@ -220,6 +220,17 @@ namespace KaijuRuin
                 { "idle", p + "idle.glb" }, { "walk", p + "walk.glb" },
                 { "punch", p + "punch.glb" }, { "block", p + "block.glb" },
                 { "hit", p + "hit.glb" }, { "death", p + "death.glb" },
+                // Dedicated special-attack clip (generated session 8 — Meshy Charged_Spell_Cast,
+                // D-011/D-015). Code already calls Anim.Play("special"); loading it here makes
+                // the special animate on its own clip instead of Resolve() falling back to "punch".
+                { "special", p + "special.glb" },
+                // Also generated + synced this session and one-line-wireable, but left UNloaded
+                // pending an on-device look (retarget + root-motion reads are unverifiable offline):
+                //   { "airrake",  p + "airrake.glb"  },  then PlayerController/EnemyAI air-rake  -> Anim.Play("airrake")
+                //   { "airslam",  p + "airslam.glb"  },  then air-slam  -> Anim.Play("airslam")
+                //   { "parry",    p + "parry.glb"    },  then parry     -> Anim.Play("parry")   (now uses "block")
+                //   { "backdash", p + "backdash.glb" },  then back-dash -> Anim.Play("backdash"); NB Back_Jump clip
+                //     carries root translation, so confirm it doesn't double-move vs the sim dash before wiring.
             };
         }
 

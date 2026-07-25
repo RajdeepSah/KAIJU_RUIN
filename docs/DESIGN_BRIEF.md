@@ -42,7 +42,7 @@ Screen is split into interaction zones. Every gesture routes to a named C# metho
 
 ## MOVES (name / trigger / behavior / numbers)
 
-Both champions: 1000 HP, meter of 3 segments (a segment charges per 150 damage dealt or 80 taken).
+Both champions: 1000 HP, meter of 3 segments (a segment charges per 150 damage dealt, or ~160 taken). The on-taken rate is **deliberately halved** from the original spec of 80 taken so that being on defense does not over-generate meter (`CombatSystem.cs` GainMeter-on-taken carries the `× 0.5` that produces this); ratified as **D-018**.
 
 | # | Move | Trigger | Behavior |
 |---|---|---|---|
@@ -106,7 +106,7 @@ Slice implementation of that pipeline:
 - Generate 7 animated GLB variants of Kest via the rig action library (animation_actions search: idle, walk, punch, block, special attack, hit reaction, death), seed-pinned.
 - Both champions use the same Meshy humanoid skeleton, so the 7 clips retarget onto Tengi in Unity via Humanoid avatars (the owner's custom-selection rule applies to future non-humanoid rigs, not these two). If credits allow, Tengi gets his own punch/special clips for silhouette flavor.
 - GltfCharacterLoader imports base GLBs + clip GLBs at runtime through glTFast, builds an AnimatorOverrideController: locomotion blend tree (idle <-> walk on speed), triggers TapAttack/Heavy/Launcher/Sweep/Block/Special/Hit/Death.
-- Budget guard: preflight get_cost per animation job; generate in priority order (idle, walk, punch, hit, death, block, special) and stop before credits drop under a 50-credit buffer; any clip not generated is listed as planned in the manifest and the Animator falls back to the punch clip with VFX overlay.
+- Budget guard: preflight get_cost per animation job; generate in priority order (idle, walk, punch, hit, death, block, special) and stop before credits drop under a 50-credit buffer; any clip not generated is listed as planned in the manifest and the Animator falls back to the punch clip with VFX overlay. **Update (session 8, D-021):** the deferred **special** clip is now generated and wired (the fallback-to-punch no longer applies to specials), plus four extra combat clips (airrake, airslam, parry, back-dash) generated and synced — see ASSET_MANIFEST + D-021.
 
 ## AUDIO (interview decision: generate everything now - D-010 deferral satisfied inside the game pipeline)
 

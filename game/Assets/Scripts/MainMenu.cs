@@ -13,11 +13,11 @@ namespace KaijuRuin
             AudioManager.I?.Music("title_theme");
             canvas = UiKit.NewCanvas("MainMenu", 20);
 
-            // Concept art never ships (manifest rule), so the title backdrop is the harbor sky layer.
-            var bg = UiKit.Image(canvas.transform, "Bg", AssetLib.Sprite("stages/harbor_sky") ?? AssetLib.Sprite("ui/vs_screen"));
+            // Main-menu key art is a shippable UI asset (ui/key_art, promoted from concept — D-019); harbor sky is the fallback.
+            var bg = UiKit.Image(canvas.transform, "Bg", AssetLib.Sprite("ui/key_art") ?? AssetLib.Sprite("stages/harbor_sky") ?? AssetLib.Sprite("ui/vs_screen"));
             bg.preserveAspect = false;
             UiKit.Rect(bg.gameObject, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            bg.color = new Color(0.75f, 0.75f, 0.78f);
+            bg.color = new Color(0.85f, 0.85f, 0.88f);   // gentle dim so the title/subtitle text stays legible over the art
 
             var emblem = UiKit.Image(canvas.transform, "Emblem", AssetLib.Sprite("ui/emblem"));
             UiKit.Rect(emblem.gameObject, new Vector2(0.42f, 0.62f), new Vector2(0.58f, 0.95f), Vector2.zero, Vector2.zero);

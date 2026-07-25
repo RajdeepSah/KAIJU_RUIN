@@ -25,8 +25,10 @@ Run the `/wrap-session` skill (or follow `.claude/skills/wrap-session/SKILL.md` 
 | `docs/ASSET_MANIFEST.md` | Every asset: ID, canonical path, spec, status, subject line, generation record | Immediately when an asset is touched |
 | `docs/ARCHITECTURE.md` | Stack intent, planned layout, code↔asset contract, testing intent | When tech decisions land |
 | `docs/DECISIONS.md` | Append-only decision log (D-###) | Same session a decision is made |
+| `docs/DESIGN_BRIEF.md` | The locked build spec for `game/` (v1.0): loop, MOVES, UI, animation, session flow | When the brief is amended (log the change as a D-###) |
+| `docs/LORE_BIBLE.md` | Canon-reference spine (v1): timeline, factions, kaiju, characters, folklore, tone — confidence-tagged | When canon is confirmed/corrected (v2 = deep-source + author pass) |
 
-`docs/DESIGN_BRIEF.md` does not exist yet — it is produced by the studio intake interview (see STATUS next steps) and unlocks coding.
+`docs/DESIGN_BRIEF.md` now exists (locked v1.0, D-013) and unblocked coding; `game/` is scaffolded and code-complete for the vertical slice. `docs/LORE_BIBLE.md` v1 exists as of session 8 (D-020).
 
 ## Ground rules
 
