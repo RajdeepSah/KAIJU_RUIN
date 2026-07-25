@@ -188,10 +188,11 @@ namespace KaijuRuin
 
             if (CombatSystem.SpecialIsDash(Self.SpecialSet, slot) && Self.Opponent != null)
             {
-                // Fox-fire Dash closes the gap before the hit lands.
-                float dir = Self.FacingRight ? 1f : -1f;
-                float targetX = Self.Opponent.transform.position.x - dir * 0.9f;
-                var p = transform.position; p.x = Mathf.Clamp(targetX, -6f, 6f); transform.position = p;
+                // Fox-fire Dash closes the gap before the hit lands, landing just
+                // outside both push boxes (D-023) rather than at a fixed 0.9 m.
+                var p = transform.position;
+                p.x = CombatSystem.DashInX(Self, Self.Opponent);
+                transform.position = p;
                 CombatSystem.SpawnDash(Self);
             }
             chainStep = 0;

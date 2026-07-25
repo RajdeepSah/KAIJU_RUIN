@@ -42,6 +42,8 @@ Screen is split into interaction zones. Every gesture routes to a named C# metho
 
 ## MOVES (name / trigger / behavior / numbers)
 
+**Reach numbers below are baseline (Kest) values — amended session 9, D-023.** Each move's listed reach is a centre-to-centre distance quoted for Kest's measured body (0.78 m knuckle reach + 0.32 m hurt half-depth = the 1.10 m jab), and the fight resolves it per pairing as `reach + (attacker.ArmReach − 0.78) + (target.HurtDepth − 0.32)`. Tengi measures 1.14 m / 0.46 m off his GLB, so he strikes and is struck from further out (his jab connects at 1.46 m against Kest). Bodies are solid: two fighters never close past the sum of their push depths (0.56–0.72 m). Per-champion metrics live in `CharacterRoster.CharacterDef`; adding a champion means measuring its model.
+
 Both champions: 1000 HP, meter of 3 segments (a segment charges per 150 damage dealt, or ~160 taken). The on-taken rate is **deliberately halved** from the original spec of 80 taken so that being on defense does not over-generate meter (`CombatSystem.cs` GainMeter-on-taken carries the `× 0.5` that produces this); ratified as **D-018**.
 
 | # | Move | Trigger | Behavior |
@@ -77,7 +79,9 @@ Feel systems (all render/timing only, never touch the deterministic sim): per-hi
 
 ## ENEMY AI (Tengi)
 
-State machine in EnemyAI.cs: APPROACH (walk to 1.4 m), POKE (lights/heavy mix, 60/40), PUNISH (whiffed player heavy triggers counter window), DEFEND (blocks 45 percent of incoming strings, drops block vs sweeps 30 percent), SPEND (uses S1 at 1 seg when player approaches, S2 at 2 seg at range, S3 at 3 seg after a knockdown). Difficulty ramps per round: reaction delay 320 ms round 1, 260 ms round 2, 200 ms round 3; block rate +10 percent per round.
+State machine in EnemyAI.cs: APPROACH, POKE (lights/heavy mix), PUNISH (whiffed player heavy triggers counter window), DEFEND, SPEND (S1 at 1 seg as a close interrupt, S2 at 2 seg as the ranged answer, S3 at 3 seg on a knockdown). Difficulty ramps per round: reaction delay 320 ms round 1, 260 ms round 2, 200 ms round 3; block rate +10 percent per round (45 percent base).
+
+**Amended session 9, D-023 — spacing is computed, not hardcoded.** Decisions stay on the reaction-delay tick but **locomotion runs every frame** (it used to live inside the tick, walking one frame in ~19). Every distance the AI acts on is derived from `CombatSystem.EffectiveReach` for the live pairing instead of a literal: APPROACH walks to just inside its own jab reach; POKE draws from the moves that actually reach, weighted 50/22/14/14 (jab / launcher / sweep / heavy) among those in range; DEFEND blocks only inside the opponent's threat reach; SPEND requires the card to reach (Kest's slot 1 exempt — it closes the gap itself); and the AI never loiters in the gap where the opponent's longest normal covers it and none of its own cover them, committing forward or stepping out. A per-round `IdleChance` (0.22 / 0.16 / 0.10) leaves punishable gaps between pokes. *Superseded: "APPROACH (walk to 1.4 m) … DEFEND (blocks 45 percent of incoming strings, drops block vs sweeps 30 percent)" as literal distances.*
 
 ## ROUND / MATCH STRUCTURE
 
@@ -92,6 +96,8 @@ State machine in EnemyAI.cs: APPROACH (walk to 1.4 m), POKE (lights/heavy mix, 6
 ## SCENE: "Harbor Ruins"
 
 Layered 2D stage from existing assets: harbor_sky (far, slight parallax 0.1x), harbor_mid (alpha midground, parallax 0.4x), fight plane strip harbor_ground (tiles horizontally), khulandra_breach (event sprite, behind mid). Flat collision ground at y=0; arena 12 m wide with soft walls. Camera: orthographic-feel perspective locked on X, follows the midpoint of both fighters, zooms 10 percent tighter when they close within 2.5 m.
+
+**Ground cues (added session 9, D-023, `GroundCues.cs` — code-generated sprites, no assets).** A soft contact shadow sits under each fighter on the fight plane (the stage is layered sprites and cannot receive a real shadow, so a rigged silhouette otherwise reads as pasted in front of the harbor); it tightens and fades as a fighter is lifted off the ground by a juggle. For the local player only, a two-tone ground band runs from the front of their body to their jab reach and on to their heavy reach, each segment lighting when the opponent is inside it — the gap is read off the floor rather than estimated between two silhouettes. `GroundCues.ShowReachGuide` turns the band off; `F2` adds a debug overlay marking every boundary that decides a hit, for both fighters.
 
 ## ART DIRECTION (locked - do not restyle)
 

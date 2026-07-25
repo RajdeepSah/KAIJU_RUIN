@@ -13,6 +13,7 @@ namespace KaijuRuin
         public const float MaxHp = 1000f;
         public const int MaxMeterSegments = 3;
         public const float MeterPerSegment = 150f;
+        public const float Arena = 6f;      // soft wall on either side of the sim axis
 
         public string DisplayName;
         public float Hp = MaxHp;
@@ -39,6 +40,16 @@ namespace KaijuRuin
         public float InvulnUntil;           // dash i-frames
         public int JuggleCount;             // hits taken in the current air juggle
 
+        // Body metrics from this fighter's CharacterDef (D-023). Defaults = Kest.
+        // These are the sim's model of the SILHOUETTE, so every range read — hit
+        // resolution, push-out, AI spacing, the player's ground cue — is derived
+        // from the same numbers and cannot drift apart from each other.
+        public float ArmReach = 0.78f;      // centre -> knuckles on a committed strike
+        public float HurtDepth = 0.32f;     // half body depth an incoming strike must touch
+        public float PushDepth = 0.28f;     // half push box; bodies never overlap
+        public float ChestY = 1.23f;        // impact height for hit FX
+        public float ModelHeight = 1.80f;   // silhouette height
+
         // Dash (evasive back-hop): a short eased slide of the sim-truth root X.
         float dashFromX, dashToX, dashElapsed, dashDur;
 
@@ -53,6 +64,17 @@ namespace KaijuRuin
 
         public float DistanceTo(Fighter other) => Mathf.Abs(other.transform.position.x - transform.position.x);
 
+        // Front of the body on the facing axis — where the silhouette actually
+        // starts, as opposed to the root's centre line.
+        public float FrontX => transform.position.x + (FacingRight ? HurtDepth : -HurtDepth);
+
+        // Clear air between the two silhouettes. Negative = the bodies overlap.
+        public float SurfaceGapTo(Fighter other) => DistanceTo(other) - HurtDepth - other.HurtDepth;
+
+        // Current visual lift (a juggled fighter leaves the ground). Render-only:
+        // reads the ProcAnim layer so the shadow and hit FX can follow the body up.
+        public float Lift => Proc != null ? Proc.Lift : 0f;
+
         void Update()
         {
             // Dash slide: advance only in live combat so hit-stop/pause freeze it.
@@ -62,7 +84,7 @@ namespace KaijuRuin
                     dashElapsed += Time.deltaTime;
                 float k = Mathf.Clamp01(dashElapsed / dashDur);
                 var p = transform.position;
-                p.x = Mathf.Clamp(Mathf.Lerp(dashFromX, dashToX, k * (2f - k)), -6f, 6f);   // ease-out
+                p.x = Mathf.Clamp(Mathf.Lerp(dashFromX, dashToX, k * (2f - k)), -Arena, Arena);   // ease-out
                 transform.position = p;
                 if (k >= 1f) dashDur = 0f;
             }
@@ -78,7 +100,7 @@ namespace KaijuRuin
         public void Dash(float dx, float dur, float invuln)
         {
             dashFromX = transform.position.x;
-            dashToX = Mathf.Clamp(transform.position.x + dx, -6f, 6f);
+            dashToX = Mathf.Clamp(transform.position.x + dx, -Arena, Arena);
             dashElapsed = 0f;
             dashDur = Mathf.Max(0.01f, dur);
             InvulnUntil = Time.time + invuln;
@@ -90,7 +112,7 @@ namespace KaijuRuin
                 || RoundManager.RoundFrozen || CombatFx.Frozen || GameManager.Paused) return;
             float mult = StageManager.I != null && StageManager.I.Flooded ? 0.9f : 1f;
             var p = transform.position;
-            p.x = Mathf.Clamp(p.x + axis * WalkSpeed * mult * Time.deltaTime, -6f, 6f);
+            p.x = Mathf.Clamp(p.x + axis * WalkSpeed * mult * Time.deltaTime, -Arena, Arena);
             transform.position = p;
             Anim?.SetLocomotion(Mathf.Abs(axis));
             if (StageManager.I != null && Mathf.Abs(axis) > 0.1f) StageManager.I.WadeSplash(transform.position);

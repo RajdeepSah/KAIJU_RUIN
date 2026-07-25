@@ -17,6 +17,7 @@ namespace KaijuRuin
         Fighter player;
         Fighter enemy;
         EnemyAI enemyAi;
+        GroundCues cues;
         Camera cam;
         Vector3 camBase;        // pre-shake camera target (shake/punch add on top)
 
@@ -100,6 +101,13 @@ namespace KaijuRuin
             var ui = new GameObject("HUD").AddComponent<TouchUI>();
             ui.Build(player, enemy, pc);
 
+            // Ground shadows + the local player's reach guide (D-023). Parented to
+            // the fight root so it tears down with the match.
+            var cuesGo = new GameObject("GroundCues");
+            cuesGo.transform.SetParent(transform, false);
+            cues = cuesGo.AddComponent<GroundCues>();
+            cues.Build(player, enemy);
+
             Prewarm();
 
             yield return VsSplash();
@@ -148,6 +156,8 @@ namespace KaijuRuin
                 enemyAi.BlockRate = 0.45f + 0.10f * (round - 1);
                 enemyAi.ParryChance = round >= 2 ? 0.18f + 0.10f * (round - 2) : 0f;
                 enemyAi.DashChance = 0.10f + 0.05f * (round - 1);
+                // Fewer breathing gaps between pokes as the match escalates (D-023).
+                enemyAi.IdleChance = round == 1 ? 0.22f : round == 2 ? 0.16f : 0.10f;
             }
             TouchUI.I.SetRoundPips(playerRounds, enemyRounds);
             TouchUI.I.RefreshBars();
@@ -249,6 +259,17 @@ namespace KaijuRuin
             f.SpecialSet = def.SpecialSet;
             f.IconKey = def.IconKey;
             f.FacingRight = faceRight;
+
+            // Body metrics measured off the rigged GLB (D-023). Every distance the
+            // fight reads — hit reach, push-out, AI spacing, the ground cues —
+            // resolves through these, so a champion's silhouette and its ranges
+            // cannot drift apart.
+            f.ArmReach = def.ArmReach;
+            f.HurtDepth = def.HurtDepth;
+            f.PushDepth = def.PushDepth;
+            f.ChestY = def.ChestY;
+            f.ModelHeight = def.ModelHeight;
+            f.Proc.AirLift = def.ModelHeight * 0.30f;
             return f;
         }
 
@@ -261,12 +282,20 @@ namespace KaijuRuin
                 if (AssetLib.Has("vfx/" + v)) AssetLib.Sprite("vfx/" + v, 256f);
         }
 
+        // One deterministic post-movement chain, in LateUpdate so every controller's
+        // Update has already run: separate the bodies, then let the camera and the
+        // ground cues read positions that are final for the frame. Doing this in
+        // LateUpdate (rather than each component minding itself) is what guarantees
+        // the gap the player sees is the gap the hit check read.
+        //
         // Camera runs every frame (not just in RunRound) so hit-stop shake and the
         // KO punch still read during banners/freeze. Paused holds it entirely.
-        void Update()
+        void LateUpdate()
         {
-            if (cam == null || GameManager.Paused) return;
-            UpdateCamera();
+            if (GameManager.Paused) return;
+            if (!CombatFx.Frozen && !RoundFrozen) CombatSystem.Separate(player, enemy);
+            if (cam != null) UpdateCamera();
+            cues?.Tick();
         }
 
         void UpdateCamera()

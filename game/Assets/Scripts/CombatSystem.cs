@@ -28,6 +28,81 @@ namespace KaijuRuin
         const float ParryWindow = 0.16f;   // block within this of its start = perfect guard
         const int MaxJuggle = 4;           // air hits before a forced knockdown
 
+        // ---- Distance model (D-023) -----------------------------------------
+        // Every Attack.Reach below is a CENTRE-TO-CENTRE distance quoted for the
+        // baseline body — Kest, measured off his rigged GLB: 0.78 m of knuckle
+        // reach and a 0.32 m hurt half-depth (their sum, 1.10 m, is exactly the
+        // brief's jab reach, which is why Kest is the baseline). A fighter with a
+        // longer arm strikes from further out, and a deeper body gets struck from
+        // further out, so the effective range is the listed reach adjusted by both
+        // bodies. Without this, one Reach number served a 1.8 m werefox and a
+        // 2.4 m culler alike: Tengi's fist visibly buried itself in Kest for
+        // 0.36 m before anything registered.
+        public const float BaselineArm = 0.78f;
+        public const float BaselineHurt = 0.32f;
+
+        // Centre-to-centre distance at which `atk` connects, for this pairing.
+        public static float EffectiveReach(Fighter attacker, Fighter target, Attack atk)
+            => atk.Reach + (attacker.ArmReach - BaselineArm) + (target.HurtDepth - BaselineHurt);
+
+        // How far past its own centre a strike can touch a SURFACE. Independent of
+        // the target (the target's depth cancels out), so this is the honest number
+        // to draw on the ground as "where my fist tops out" — for Kest's jab it
+        // comes out at 0.78 m, his knuckles exactly.
+        public static float StrikeExtent(Fighter attacker, Attack atk)
+            => atk.Reach + attacker.ArmReach - BaselineArm - BaselineHurt;
+
+        // The longest normal `attacker` can threaten `target` with (Heavy today).
+        // The AI's spacing reads this to know when it is standing in danger.
+        public static float ThreatReach(Fighter attacker, Fighter target)
+            => EffectiveReach(attacker, target, Heavy);
+
+        public static bool InRange(Fighter attacker, Fighter target, Attack atk)
+            => target != null && !target.Dead && InFront(attacker, target)
+               && attacker.DistanceTo(target) <= EffectiveReach(attacker, target, atk);
+
+        // A strike only reaches what it is turned toward. Both controllers re-face
+        // every frame so this is normally a formality, but it closes the phantom
+        // hit where a fighter connects with something behind their own back.
+        static bool InFront(Fighter attacker, Fighter target)
+            => (target.transform.position.x - attacker.transform.position.x)
+               * (attacker.FacingRight ? 1f : -1f) > -0.01f;
+
+        // Closest the two bodies may stand. Push boxes are narrower than hurt
+        // boxes (a cloak reads as silhouette but is not solid), same as any fighter.
+        public static float MinSeparation(Fighter a, Fighter b) => a.PushDepth + b.PushDepth;
+
+        // Bodies are solid on the sim axis: neither fighter may walk through the
+        // other. RoundManager runs this once per frame, after all movement, as the
+        // single authority — so the gap the player SEES and the gap the hit check
+        // reads can never disagree, and point-blank stops being a state where every
+        // move connects because the two roots share an X.
+        public static void Separate(Fighter a, Fighter b)
+        {
+            if (a == null || b == null || a.Dead || b.Dead) return;
+            float ax = a.transform.position.x, bx = b.transform.position.x;
+            float gap = bx - ax;
+            float sign = gap >= 0f ? 1f : -1f;                  // +1 when b is to the right
+            float overlap = MinSeparation(a, b) - Mathf.Abs(gap);
+            if (overlap <= 0.0001f) return;
+
+            // Split the correction, except that a fighter pinned against a soft
+            // wall pushes the other the whole way instead of sinking through it.
+            float aPush = -sign * overlap * 0.5f, bPush = sign * overlap * 0.5f;
+            if (Mathf.Abs(ax + aPush) >= Fighter.Arena) { aPush = 0f; bPush = sign * overlap; }
+            else if (Mathf.Abs(bx + bPush) >= Fighter.Arena) { bPush = 0f; aPush = -sign * overlap; }
+
+            SetX(a, ax + aPush);
+            SetX(b, bx + bPush);
+        }
+
+        static void SetX(Fighter f, float x)
+        {
+            var p = f.transform.position;
+            p.x = Mathf.Clamp(x, -Fighter.Arena, Fighter.Arena);
+            f.transform.position = p;
+        }
+
         // Universal normals (recoveries trimmed from v1 for a faster fight, D-015).
         public static readonly Attack Jab      = new Attack { Name = "Jab",      Damage = 40,  Reach = 1.1f, Recovery = 0.20f, StepIn = 0.06f, Fx = FxWeight.Light,  Sfx = "hit_light" };
         public static readonly Attack Cross    = new Attack { Name = "Cross",    Damage = 50,  Reach = 1.1f, Recovery = 0.20f, StepIn = 0.08f, Fx = FxWeight.Light,  Sfx = "hit_light" };
@@ -59,6 +134,16 @@ namespace KaijuRuin
         // Dash). Kept as data so the controllers don't hardcode a character name.
         public static bool SpecialIsDash(string set, int slot) => set == "kest" && slot == 1;
 
+        // Where a gap-closing special plants the attacker: touching, but just outside
+        // the push boxes, so the strike that follows is inside every move's range and
+        // the two bodies never interpenetrate on arrival.
+        public static float DashInX(Fighter attacker, Fighter target)
+        {
+            float dir = attacker.FacingRight ? 1f : -1f;
+            float x = target.transform.position.x - dir * (MinSeparation(attacker, target) + 0.10f);
+            return Mathf.Clamp(x, -Fighter.Arena, Fighter.Arena);
+        }
+
         // Returns true when the attack connected (clean, unblocked).
         public static bool Resolve(Fighter attacker, Attack atk)
         {
@@ -71,7 +156,10 @@ namespace KaijuRuin
 
             // Reach is checked against the PRE-step-in distance so listed ranges hold
             // and whiff-punish still works; step-in is a follow-through on connect only.
-            if (attacker.DistanceTo(target) > atk.Reach)
+            // A low sweep also passes harmlessly under a juggled opponent, who is now
+            // visibly off the ground (ProcAnim lift) — a low that hit an airborne body
+            // was the most obvious phantom hit in the slice.
+            if (!InRange(attacker, target, atk) || (atk.Low && target.Airborne))
             {
                 // Whiff: readable answer so "I missed and I'm exposed" is felt.
                 AudioManager.I?.Sfx("whiff", 0.4f);   // soft-fails until the clip exists
@@ -92,7 +180,14 @@ namespace KaijuRuin
             // never extends reach (applied after the whiff check).
             if (atk.StepIn > 0f) StepIn(attacker, target, atk.StepIn);
 
-            var impact = target.transform.position + Vector3.up * 1.1f;
+            // A hit resolves on the input frame, but hit-stop freezes the pose a
+            // moment later — so without snapping the attacker's gesture to its peak
+            // the freeze frame shows a fighter who has not extended yet, which is
+            // exactly what reads as "that shouldn't have reached me". Same for the
+            // victim's recoil below.
+            attacker.Proc?.Contact();
+
+            var impact = ImpactPoint(attacker, target, atk);
             bool blocked = target.Blocking && !atk.Low && !target.Airborne;
             bool parried = blocked && target.ParryArmed && (Time.time - target.BlockStartedAt) <= ParryWindow;
 
@@ -105,6 +200,7 @@ namespace KaijuRuin
                 attacker.AttackLockUntil = Mathf.Max(attacker.AttackLockUntil, attacker.StunUntil);
                 attacker.Anim?.Play("hit", 0.05f);
                 attacker.Proc?.Play(ProcAnim.Move.Hit);
+                attacker.Proc?.Contact();
                 target.GainMeter(40f);
                 target.ParryArmed = false;                    // one parry per block press
                 AudioManager.I?.Sfx("block", 0.9f);
@@ -145,12 +241,11 @@ namespace KaijuRuin
                 }
                 target.Anim?.Play("hit", 0.05f);
                 target.Proc?.Play(ProcAnim.Move.Hit);
+                target.Proc?.Contact();          // recoil lands on the frozen frame, not after it
                 if (atk.Knockback > 0f)
                 {
                     float dir = attacker.FacingRight ? 1f : -1f;
-                    var p = target.transform.position;
-                    p.x = Mathf.Clamp(p.x + dir * atk.Knockback, -6f, 6f);
-                    target.transform.position = p;
+                    SetX(target, target.transform.position.x + dir * atk.Knockback);
                 }
                 SpawnHitVfx(impact, atk.Vfx);                  // spark + blood + special
                 if (atk.Fx == FxWeight.Heavy || atk.Fx == FxWeight.Special)
@@ -186,17 +281,31 @@ namespace KaijuRuin
 
         static bool IsSpecial(Attack atk) => atk.Vfx != null;
 
-        // Attacks drive the attacker forward, never crossing a minimum gap.
+        // Attacks drive the attacker forward, never crossing a minimum gap. The gap
+        // scales with both bodies (D-023) so a step-in can't shove a fighter inside
+        // an opponent the push-out pass would only have to eject again.
         static void StepIn(Fighter attacker, Fighter target, float amount)
         {
             float dir = attacker.FacingRight ? 1f : -1f;
-            const float minGap = 0.9f;
-            var p = attacker.transform.position;
-            float desired = p.x + dir * amount;
+            float minGap = MinSeparation(attacker, target) + 0.10f;
+            float desired = attacker.transform.position.x + dir * amount;
             if (dir > 0f) desired = Mathf.Min(desired, target.transform.position.x - minGap);
             else desired = Mathf.Max(desired, target.transform.position.x + minGap);
-            p.x = Mathf.Clamp(desired, -6f, 6f);
-            attacker.transform.position = p;
+            SetX(attacker, desired);
+        }
+
+        // Where a connecting strike reads as touching: the near surface of the
+        // target's body, at a height the move implies, following a juggled body up.
+        // (It used to be the target's centre line at a flat 1.1 m — belly height on
+        // Tengi, and behind the surface the fist actually reached.)
+        static Vector3 ImpactPoint(Fighter attacker, Fighter target, Attack atk)
+        {
+            float dir = attacker.FacingRight ? 1f : -1f;
+            float x = target.transform.position.x - dir * target.HurtDepth * 0.85f;
+            float y = atk.Low ? target.ChestY * 0.42f
+                    : atk.Launch ? target.ChestY * 1.08f
+                    : target.ChestY;
+            return new Vector3(x, y + target.Lift, 0f);
         }
 
         // Impact "juice" per hit weight (D-015): hit-stop bite + camera shake/punch.
@@ -228,11 +337,12 @@ namespace KaijuRuin
             Spawn("hit_spark", pos, 0.55f, AssetLib.AshSteel);
         }
 
-        // Whiff: a faint smear at the attacker so a miss is visible, not silent.
+        // Whiff: a faint smear where this fighter's knuckles actually stopped, so a
+        // miss shows the player the gap they misjudged rather than a generic puff.
         public static void SpawnWhiffVfx(Fighter attacker)
         {
             float dir = attacker.FacingRight ? 1f : -1f;
-            var pos = attacker.transform.position + new Vector3(dir * 0.8f, 1.1f, 0f);
+            var pos = attacker.transform.position + new Vector3(dir * attacker.ArmReach, attacker.ChestY, 0f);
             Spawn("hit_spark", pos, 0.4f, new Color(0.9f, 0.9f, 0.9f, 0.35f));
         }
 
@@ -240,7 +350,7 @@ namespace KaijuRuin
         public static void SpawnDash(Fighter f)
         {
             float dir = f.FacingRight ? 1f : -1f;
-            var pos = f.transform.position + new Vector3(-dir * 0.4f, 0.95f, 0f);
+            var pos = f.transform.position + new Vector3(-dir * 0.4f, f.ChestY * 0.78f, 0f);
             SpawnFx("dash_streak", "hit_spark", pos, 1.1f, f.Theme);
         }
 

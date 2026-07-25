@@ -11,6 +11,12 @@ namespace KaijuRuin
     // on the rig's "Visual" child — lunge, uppercut rise, low sweep crouch,
     // back-hop, air reach, character-flavoured special flourish.
     //
+    // Session 9 (D-023) adds two distance-reading duties: an airborne lift, so a
+    // juggled fighter visibly leaves the ground instead of being hit by air moves
+    // while apparently standing, and Contact(), which snaps a gesture to its peak
+    // on the frame a strike resolves so the hit-stop freeze frame shows the pose
+    // the move was drawn to land in.
+    //
     // Invariant (ARCHITECTURE deterministic-sim contract): this animates the
     // "Visual" CHILD transform only. The root's X position — the sole sim truth
     // for range/hit resolution — is never touched here.
@@ -36,10 +42,19 @@ namespace KaijuRuin
         Vector3 basePos;
         Quaternion baseRot;
         Vector3 baseScale;
+        Fighter owner;
 
         // Per-character feel (set by RoundManager): amplitude and duration scaling.
         public float AmpMul = 1f;
         public float DurMul = 1f;
+
+        // Airborne lift (set by RoundManager from the model height). A juggled
+        // fighter has to LOOK off the ground or the air follow-ups' longer reach
+        // reads as a phantom hit on someone standing right there — and the shadow
+        // needs something to separate from. Still visual-only: the sim's X is the
+        // only truth for range, and lift never touches it.
+        public float AirLift = 0.54f;
+        public float Lift { get; private set; }
 
         bool active;
         float t;
@@ -49,10 +64,15 @@ namespace KaijuRuin
         {
             if (!Capture()) return;
 
+            // Hit-stop holds everything, lift included, so impacts freeze whole.
+            float dt = CombatFx.Frozen ? 0f : Time.deltaTime;
+
+            float wantLift = (owner != null && owner.Airborne && !owner.Dead) ? AirLift : 0f;
+            Lift = Mathf.MoveTowards(Lift, wantLift, dt * (wantLift > Lift ? 4.5f : 2.2f));
+
             if (active)
             {
-                // Hold the pose during hit-stop so the whole fighter freezes on impact.
-                if (!CombatFx.Frozen) t += Time.deltaTime;
+                t += dt;
                 float dur = Mathf.Max(0.01f, cur.dur * DurMul);
                 float nt = t / dur;
                 if (nt >= 1f) { active = false; Apply(Vector3.zero, Vector3.zero, 0f); }
@@ -62,12 +82,14 @@ namespace KaijuRuin
                     Apply(cur.pos * e, cur.rot * e, cur.squash * e);
                 }
             }
+            else if (Lift > 0.0001f) Apply(Vector3.zero, Vector3.zero, 0f);
         }
 
         bool Capture()
         {
             if (captured) return visual != null;
             visual = transform.Find("Visual");
+            owner = GetComponent<Fighter>();
             captured = true;
             if (visual == null) return false;   // capsule fallback: no procedural layer
             basePos = visual.localPosition;
@@ -87,10 +109,21 @@ namespace KaijuRuin
             active = true;
         }
 
+        // Jump the active gesture to its amplitude peak — the pose the move was
+        // drawn to hit in. Called at the instant a strike resolves (CombatSystem),
+        // because hit-stop then freezes the fighter for up to 140 ms: without this
+        // the freeze frame catches a lunge that has not left the idle pose, and the
+        // hit reads as landing from further away than the body ever reached.
+        public void Contact()
+        {
+            if (!active) return;
+            t = Mathf.Max(t, Mathf.Max(0.01f, cur.dur * DurMul) * cur.peak);
+        }
+
         void Apply(Vector3 pos, Vector3 rotEuler, float squash)
         {
             if (visual == null) return;
-            visual.localPosition = basePos + pos;
+            visual.localPosition = basePos + pos + Vector3.up * Lift;
             visual.localRotation = baseRot * Quaternion.Euler(rotEuler);
             float sy = Mathf.Max(0.5f, 1f - squash);
             float sx = 1f + squash * 0.5f;
