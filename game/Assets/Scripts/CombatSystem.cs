@@ -31,6 +31,26 @@ namespace KaijuRuin
         const float ParryWindow = 0.16f;   // block within this of its start = perfect guard
         const int MaxJuggle = 4;           // air hits before a forced knockdown
 
+        // ---- Damage economy (D-025) -----------------------------------------
+        // Every damage number in this file is 37.5% of its pre-rebalance value — a
+        // ~62% cut, owner directive, for longer matches with more back-and-forth
+        // before a KO. **Health is deliberately unchanged at 1000**, because cutting
+        // it in step would have cancelled the whole point: a KO now takes ~2.7x as
+        // many landed hits as it did, and that ratio IS the rebalance.
+        //
+        // The two meter constants below carry the reciprocal, so meter is still
+        // earned at exactly the old rate PER HIT (a segment costs ~3.7 landed jabs,
+        // as before) rather than per point of damage. That is what keeps the economy
+        // consistent instead of merely slower: because a full health bar now takes
+        // 2.7x more hits to remove, cards fire ~2.7x more often per round, each for
+        // 37.5% of its old damage — so the SHARE of a health bar lost to specials
+        // versus normals is unchanged. Scaling meter with the damage instead would
+        // have made specials 2.7x rarer for 0.375x the payoff, quietly deleting them
+        // from the fight.
+        public const float DamageRebalance = 0.375f;        // documents the cut; derives the two below
+        const float MeterDealt = 1f / DamageRebalance;      // 2.667 -> ~1 segment per 56 damage dealt
+        const float MeterTaken = 0.9375f / DamageRebalance; // 2.500 -> ~1 segment per 60 taken (D-018's halved rate)
+
         // ---- Distance model (D-023) -----------------------------------------
         // Every Attack.Reach below is a CENTRE-TO-CENTRE distance quoted for the
         // baseline body — Kest, measured off his rigged GLB: 0.78 m of knuckle
@@ -123,21 +143,21 @@ namespace KaijuRuin
         //   standing guard  <- beaten by Low (tail sweep, leg sweep) and by Grab
         //   crouch guard    <- beaten by Overhead (claw slam) and by Grab
         //   no guard        <- beaten by everything, hardest by the haymaker
-        public static readonly Attack Jab      = new Attack { Name = "Claw Jab",      Damage = 40,  Reach = 1.10f, Recovery = 0.20f, StepIn = 0.06f, Fx = FxWeight.Light,  Sfx = "hit_light" };
-        public static readonly Attack Cross    = new Attack { Name = "Claw Cross",    Damage = 55,  Reach = 1.20f, Recovery = 0.24f, StepIn = 0.10f, Fx = FxWeight.Light,  Sfx = "hit_light" };
-        public static readonly Attack Hook     = new Attack { Name = "Claw Hook",     Damage = 75,  Reach = 1.15f, Recovery = 0.34f, Knockback = 0.5f, StepIn = 0.12f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
-        public static readonly Attack Launcher = new Attack { Name = "Rising Claw",   Damage = 90,  Reach = 1.35f, Recovery = 0.50f, StepIn = 0.12f, Launch = true, Fx = FxWeight.Launch, Sfx = "hit_heavy" };
-        public static readonly Attack Slam     = new Attack { Name = "Claw Slam",     Damage = 110, Reach = 1.30f, Recovery = 0.56f, Knockback = 0.8f, StepIn = 0.14f, Overhead = true, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
-        public static readonly Attack Heavy    = new Attack { Name = "Haymaker",      Damage = 120, Reach = 1.60f, Recovery = 0.62f, Knockback = 1.5f, StepIn = 0.22f, Fx = FxWeight.Heavy,  Sfx = "hit_heavy" };
-        public static readonly Attack TailRound= new Attack { Name = "Tail Roundhouse",Damage = 100,Reach = 1.75f, Recovery = 0.54f, Knockback = 1.2f, StepIn = 0.16f, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
-        public static readonly Attack Sweep    = new Attack { Name = "Tail Sweep",    Damage = 80,  Reach = 1.45f, Recovery = 0.50f, StepIn = 0.20f, Low = true, Knockdown = true, Fx = FxWeight.Medium, Sfx = "hit_light" };
-        public static readonly Attack LegSweep = new Attack { Name = "Leg Sweep",     Damage = 55,  Reach = 1.15f, Recovery = 0.32f, StepIn = 0.14f, Low = true,    Fx = FxWeight.Light,  Sfx = "hit_light" };
-        public static readonly Attack Bash     = new Attack { Name = "Haunch Bash",   Damage = 70,  Reach = 0.95f, Recovery = 0.36f, Knockback = 0.9f, StepIn = 0.08f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
+        public static readonly Attack Jab      = new Attack { Name = "Claw Jab",      Damage = 15, Reach = 1.10f, Recovery = 0.20f, StepIn = 0.06f, Fx = FxWeight.Light,  Sfx = "hit_light" };
+        public static readonly Attack Cross    = new Attack { Name = "Claw Cross",    Damage = 21, Reach = 1.20f, Recovery = 0.24f, StepIn = 0.10f, Fx = FxWeight.Light,  Sfx = "hit_light" };
+        public static readonly Attack Hook     = new Attack { Name = "Claw Hook",     Damage = 28, Reach = 1.15f, Recovery = 0.34f, Knockback = 0.5f, StepIn = 0.12f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
+        public static readonly Attack Launcher = new Attack { Name = "Rising Claw",   Damage = 34, Reach = 1.35f, Recovery = 0.50f, StepIn = 0.12f, Launch = true, Fx = FxWeight.Launch, Sfx = "hit_heavy" };
+        public static readonly Attack Slam     = new Attack { Name = "Claw Slam",     Damage = 41, Reach = 1.30f, Recovery = 0.56f, Knockback = 0.8f, StepIn = 0.14f, Overhead = true, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+        public static readonly Attack Heavy    = new Attack { Name = "Haymaker",      Damage = 45, Reach = 1.60f, Recovery = 0.62f, Knockback = 1.5f, StepIn = 0.22f, Fx = FxWeight.Heavy,  Sfx = "hit_heavy" };
+        public static readonly Attack TailRound= new Attack { Name = "Tail Roundhouse",Damage = 38,Reach = 1.75f, Recovery = 0.54f, Knockback = 1.2f, StepIn = 0.16f, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+        public static readonly Attack Sweep    = new Attack { Name = "Tail Sweep",    Damage = 30, Reach = 1.45f, Recovery = 0.50f, StepIn = 0.20f, Low = true, Knockdown = true, Fx = FxWeight.Medium, Sfx = "hit_light" };
+        public static readonly Attack LegSweep = new Attack { Name = "Leg Sweep",     Damage = 21, Reach = 1.15f, Recovery = 0.32f, StepIn = 0.14f, Low = true,    Fx = FxWeight.Light,  Sfx = "hit_light" };
+        public static readonly Attack Bash     = new Attack { Name = "Haunch Bash",   Damage = 26, Reach = 0.95f, Recovery = 0.36f, Knockback = 0.9f, StepIn = 0.08f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
 
         // Command grab: the answer to a fighter who simply holds guard. Ignores both
         // stances, so its cost is range and commitment — it reaches barely past the
         // push boxes and its whiff is the longest recovery of any normal.
-        public static readonly Attack Grab     = new Attack { Name = "Command Grab",  Damage = 140, Reach = 0.85f, Recovery = 0.70f, Knockback = 1.0f, Grab = true, Knockdown = true, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+        public static readonly Attack Grab     = new Attack { Name = "Command Grab",  Damage = 52, Reach = 0.85f, Recovery = 0.70f, Knockback = 1.0f, Grab = true, Knockdown = true, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
 
         // The longest normal in the set — the AI's threat radius and the outer ground
         // band both read this rather than naming a move.
@@ -153,15 +173,17 @@ namespace KaijuRuin
         }
 
         // Air-juggle follow-ups (used only while the target is airborne, D-015).
-        public static readonly Attack AirRake  = new Attack { Name = "Air Rake",  Damage = 55, Reach = 1.4f, Recovery = 0.30f, StepIn = 0.10f, Launch = true, Fx = FxWeight.Medium, Sfx = "hit_light" };
-        public static readonly Attack AirSlam  = new Attack { Name = "Air Slam",  Damage = 95, Reach = 1.5f, Recovery = 0.50f, Knockback = 1.4f, StepIn = 0.10f, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+        public static readonly Attack AirRake  = new Attack { Name = "Air Rake",  Damage = 21, Reach = 1.4f, Recovery = 0.30f, StepIn = 0.10f, Launch = true, Fx = FxWeight.Medium, Sfx = "hit_light" };
+        public static readonly Attack AirSlam  = new Attack { Name = "Air Slam",  Damage = 36, Reach = 1.5f, Recovery = 0.50f, Knockback = 1.4f, StepIn = 0.10f, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
 
-        public static Attack KestS1  => new Attack { Name = "Fox-fire Dash",  Damage = 100, Reach = 3.2f, Recovery = 0.5f, Knockback = 1.0f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
-        public static Attack KestS2  => new Attack { Name = "Phantom Rake",   Damage = 160, Reach = 1.4f, Recovery = 0.7f, Knockback = 0.8f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
-        public static Attack KestS3  => new Attack { Name = "Hunt of Shadows",Damage = 280, Reach = 2.2f, Recovery = 1.0f, Knockback = 2.0f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
-        public static Attack TengiS1 => new Attack { Name = "Crow Wall",      Damage = 130, Reach = 1.4f, Recovery = 0.6f, Knockback = 1.0f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
-        public static Attack TengiS2 => new Attack { Name = "Culling Arc",    Damage = 180, Reach = 3.0f, Recovery = 0.8f, Knockback = 1.5f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
-        public static Attack TengiS3 => new Attack { Name = "Black Sun",      Damage = 300, Reach = 1.8f, Recovery = 1.4f, Knockback = 2.2f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
+        // Specials took the same ~62% cut, so a card's share of a health bar is what
+        // it always was: slot 3 is still a quarter-bar swing, not a third of one.
+        public static Attack KestS1  => new Attack { Name = "Fox-fire Dash",  Damage = 38,  Reach = 3.2f, Recovery = 0.5f, Knockback = 1.0f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
+        public static Attack KestS2  => new Attack { Name = "Phantom Rake",   Damage = 60,  Reach = 1.4f, Recovery = 0.7f, Knockback = 0.8f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
+        public static Attack KestS3  => new Attack { Name = "Hunt of Shadows",Damage = 105, Reach = 2.2f, Recovery = 1.0f, Knockback = 2.0f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
+        public static Attack TengiS1 => new Attack { Name = "Crow Wall",      Damage = 49,  Reach = 1.4f, Recovery = 0.6f, Knockback = 1.0f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
+        public static Attack TengiS2 => new Attack { Name = "Culling Arc",    Damage = 68,  Reach = 3.0f, Recovery = 0.8f, Knockback = 1.5f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
+        public static Attack TengiS3 => new Attack { Name = "Black Sun",      Damage = 112, Reach = 1.8f, Recovery = 1.4f, Knockback = 2.2f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
 
         // Card slot (1..3) -> Attack for a character's special set. Adding a set for a
         // new champion is one more branch here + its cards on the fighter (D-017).
@@ -249,7 +271,7 @@ namespace KaijuRuin
                 attacker.Anim?.Play("hit", 0.05f);
                 attacker.Proc?.Play(ProcAnim.Move.Hit);
                 attacker.Proc?.Contact();
-                target.GainMeter(40f);
+                target.GainMeter(40f);                        // ~one landed jab's worth, still, after D-025
                 target.ParryArmed = false;                    // one parry per block press
                 AudioManager.I?.Sfx("block", 0.9f);
                 SpawnFx("parry_spark", "meter_flare", impact, 1.3f, AssetLib.GoryoFlame);
@@ -272,6 +294,12 @@ namespace KaijuRuin
             {
                 // Air-juggle bookkeeping: each successive air hit decays, and the
                 // juggle ends (knockdown) after MaxJuggle so it can't loop forever.
+                // The decay is a RATIO, so the D-025 damage cut carried it for free:
+                // a full 4-hit juggle route is still worth the same share of a health
+                // bar relative to every other route (verified: ~9.5% of the bar,
+                // exactly 0.375x its old 25%, the same factor every move took).
+                // Re-tuning the 0.1 here would change juggle BALANCE, which the
+                // rebalance did not ask for.
                 bool wasAirborne = target.Airborne;
                 if (wasAirborne) { target.JuggleCount++; damage *= Mathf.Max(0.5f, 1f - 0.1f * target.JuggleCount); }
                 bool keepAir = atk.Launch && (!wasAirborne || target.JuggleCount < MaxJuggle);
@@ -317,8 +345,12 @@ namespace KaijuRuin
             // Specials grant reduced meter (0.25x) so a normal-xx-special confirm is
             // meter-negative — specials stay a resource earned from neutral, not
             // self-funded pressure (D-015 review fix).
-            attacker.GainMeter(IsSpecial(atk) ? damage * 0.25f : damage);   // ~1 segment per 150 damage dealt (normals)
-            target.GainMeter(damage * 150f / 80f * 0.5f);  // taken damage charges faster (halved: ~1 seg / 160 taken)
+            // Meter per HIT is unchanged by the D-025 damage cut (see the constants):
+            // a landed jab is still worth ~40, so a segment is still ~3.7 jabs. The
+            // 0.25x on specials keeps a normal-xx-special confirm meter-negative
+            // (D-015 review fix), so specials stay earned from neutral.
+            attacker.GainMeter(damage * MeterDealt * (IsSpecial(atk) ? 0.25f : 1f));
+            target.GainMeter(damage * MeterTaken);         // taken charges slightly faster (D-018's halved rate)
             TouchUI.I?.RefreshBars();
 
             if (target.Hp <= 0f && !target.Dead)

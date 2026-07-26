@@ -46,23 +46,23 @@ Screen is split into interaction zones. Every gesture routes to a named C# metho
 
 **Reach numbers below are baseline (Kest) values — amended session 9, D-023.** Each move's listed reach is a centre-to-centre distance quoted for Kest's measured body (0.78 m knuckle reach + 0.32 m hurt half-depth = the 1.10 m jab), and the fight resolves it per pairing as `reach + (attacker.ArmReach − 0.78) + (target.HurtDepth − 0.32)`. Tengi measures 1.14 m / 0.46 m off his GLB, so he strikes and is struck from further out (his jab connects at 1.46 m against Kest). Bodies are solid: two fighters never close past the sum of their push depths (0.56–0.72 m). Per-champion metrics live in `CharacterRoster.CharacterDef`; adding a champion means measuring its model.
 
-Both champions: 1000 HP, meter of 3 segments (a segment charges per 150 damage dealt, or ~160 taken). The on-taken rate is **deliberately halved** from the original spec of 80 taken so that being on defense does not over-generate meter (`CombatSystem.cs` GainMeter-on-taken carries the `× 0.5` that produces this); ratified as **D-018**.
+Both champions: 1000 HP, meter of 3 segments. **Amended session 11, D-025:** a segment charges per **~56 damage dealt or ~60 taken** (was 150 / ~160) - the rates carry the reciprocal of the damage cut, so a segment still costs the same NUMBER OF HITS as it always did (~3.8 landed jabs, ~4.0 taken). The on-taken rate stays **deliberately halved** relative to dealt so defense does not over-generate meter; ratified as **D-018**, unchanged in hit terms by D-025.
 
 | # | Move | Trigger | Behavior |
 |---|---|---|---|
-| 1 | Light chain 1 (Jab) | tap | 40 dmg, 1.1 m reach, 0.25 s recovery, chains within 0.6 s |
-| 2 | Light chain 2 (Cross) | tap tap | 50 dmg, same reach, chains |
-| 3 | Light chain 3 (Finisher) | tap tap tap | 70 dmg, small knockback, 0.5 s recovery |
-| 4 | Heavy | swipe toward | 120 dmg, 1.6 m reach, 0.8 s recovery, knockback 1.5 m |
-| 5 | Launcher | swipe up | 90 dmg, pops the opponent airborne 0.7 s (juggle: one free light) |
-| 6 | Sweep | swipe down | 80 dmg, low hit, beats standing block |
+| 1 | Light chain 1 (Jab) | tap | 15 dmg, 1.1 m reach, 0.25 s recovery, chains within 0.6 s |
+| 2 | Light chain 2 (Cross) | tap tap | 21 dmg, same reach, chains |
+| 3 | Light chain 3 (Finisher) | tap tap tap | 28 dmg, small knockback, 0.5 s recovery |
+| 4 | Heavy | swipe toward | 45 dmg, 1.6 m reach, 0.8 s recovery, knockback 1.5 m |
+| 5 | Launcher | swipe up | 34 dmg, pops the opponent airborne 0.7 s (juggle: one free light) |
+| 6 | Sweep | swipe down | 30 dmg, low hit, beats standing block |
 | 7 | Block | hold | reduces damage 75 percent, 10 percent chip on specials, cannot attack while held |
-| 8 | Kest S1: Fox-fire Dash | card 1 (1 seg) | gap-closing dash strike, 100 dmg, plays vfx_kest_foxfire |
-| 9 | Kest S2: Phantom Rake | card 2 (2 seg) | three-hit phantom claw combo, 160 dmg total |
-| 10 | Kest S3: Hunt of Shadows | card 3 (3 seg) | cinematic: ring of fox shadows, 280 dmg, brief slowdown |
-| 11 | Tengi S1: Crow Wall | card 1 (1 seg) | 1.2 s counter stance; countered hit answers for 130 dmg (vfx feathers) |
-| 12 | Tengi S2: Culling Arc | card 2 (2 seg) | horizontal blade wave, 180 dmg, plays vfx_tengi_bladewave |
-| 13 | Tengi S3: Black Sun | card 3 (3 seg) | slow overhead execution arc, 300 dmg, huge recovery on whiff |
+| 8 | Kest S1: Fox-fire Dash | card 1 (1 seg) | gap-closing dash strike, 38 dmg, plays vfx_kest_foxfire |
+| 9 | Kest S2: Phantom Rake | card 2 (2 seg) | three-hit phantom claw combo, 60 dmg total |
+| 10 | Kest S3: Hunt of Shadows | card 3 (3 seg) | cinematic: ring of fox shadows, 105 dmg, brief slowdown |
+| 11 | Tengi S1: Crow Wall | card 1 (1 seg) | 1.2 s counter stance; countered hit answers for 49 dmg (vfx feathers) |
+| 12 | Tengi S2: Culling Arc | card 2 (2 seg) | horizontal blade wave, 68 dmg, plays vfx_tengi_bladewave |
+| 13 | Tengi S3: Black Sun | card 3 (3 seg) | slow overhead execution arc, 112 dmg, huge recovery on whiff |
 
 ## MOVES v2 - combat expansion (session 5, D-015 - owner directive "lean into the fighter")
 
@@ -71,8 +71,8 @@ Layered onto the SAME one-thumb control scheme; the only new gesture binding is 
 | # | Move | Trigger | Behavior |
 |---|---|---|---|
 | 14 | Back-dash (Evade) | swipe away from opponent | ~1.2 m backward hop, i-frames 0.24 s, recovery 0.30 s, dust VFX; neutral-only (not a recovery-cancel). Resolves the away-swipe reservation. |
-| 15 | Air Rake | tap while opponent is airborne | 55 dmg juggle hit that keeps them airborne; part of the launcher juggle route |
-| 16 | Air Slam | swipe up while opponent is airborne | 95 dmg spike, ends the juggle with knockback; heavy hit-stop |
+| 15 | Air Rake | tap while opponent is airborne | 21 dmg juggle hit that keeps them airborne; part of the launcher juggle route |
+| 16 | Air Slam | swipe up while opponent is airborne | 36 dmg spike, ends the juggle with knockback; heavy hit-stop |
 | 17 | Parry (perfect guard) | block that connects within 160 ms of its start | 0 dmg / 0 chip, attacker stunned ~0.45 s (punish window), defender +60 meter, teal spark + screen flash |
 | 18 | Special-cancel | cast a card during your own attack recovery | spends meter to cancel the recovery and link the special ("normal xx special" combos) |
 | 19 | Chain-cancel enders | during a connected light chain: swipe up / in / down | cancels the light's recovery into launcher / heavy / sweep (target combos); launcher ender opens the air juggle |
@@ -102,23 +102,36 @@ The owner directed more variety across **kaiju-scaled** strikes (claws, tail, ha
 
 | # | Move | Trigger | Dmg | Reach | Recovery | Guard class |
 |---|---|---|---|---|---|---|
-| 20 | Claw Jab | tap | 40 | 1.10 | 0.20 | mid |
-| 21 | Claw Cross | tap tap | 55 | 1.20 | 0.24 | mid |
-| 22 | Claw Hook (arcing) | tap tap tap | 75 | 1.15 | 0.34 | mid, knockback 0.5 |
-| 23 | Rising Claw Uppercut | swipe up | 90 | 1.35 | 0.50 | mid, launcher |
-| 24 | Overhead Claw Slam | swipe up-and-toward | 110 | 1.30 | 0.56 | **OVERHEAD** |
-| 25 | Haymaker | swipe toward | 120 | 1.60 | 0.62 | mid, knockback 1.5 |
-| 26 | Tail Roundhouse | crouch + swipe toward | 100 | 1.75 | 0.54 | mid, knockback 1.2, **longest normal** |
-| 27 | Low Tail Sweep | swipe down | 80 | 1.45 | 0.50 | **LOW** + knockdown |
-| 28 | Low Leg Sweep | swipe down-and-away, or tap while crouching | 55 | 1.15 | 0.32 | **LOW** |
-| 29 | Haunch Bash | swipe down-and-toward | 70 | 0.95 | 0.36 | mid, knockback 0.9 |
-| 30 | Command Grab + body slam | swipe up-and-away | 140 | 0.85 | 0.70 | **IGNORES GUARD** + knockdown |
+| 20 | Claw Jab | tap | 15 | 1.10 | 0.20 | mid |
+| 21 | Claw Cross | tap tap | 21 | 1.20 | 0.24 | mid |
+| 22 | Claw Hook (arcing) | tap tap tap | 28 | 1.15 | 0.34 | mid, knockback 0.5 |
+| 23 | Rising Claw Uppercut | swipe up | 34 | 1.35 | 0.50 | mid, launcher |
+| 24 | Overhead Claw Slam | swipe up-and-toward | 41 | 1.30 | 0.56 | **OVERHEAD** |
+| 25 | Haymaker | swipe toward | 45 | 1.60 | 0.62 | mid, knockback 1.5 |
+| 26 | Tail Roundhouse | crouch + swipe toward | 38 | 1.75 | 0.54 | mid, knockback 1.2, **longest normal** |
+| 27 | Low Tail Sweep | swipe down | 30 | 1.45 | 0.50 | **LOW** + knockdown |
+| 28 | Low Leg Sweep | swipe down-and-away, or tap while crouching | 21 | 1.15 | 0.32 | **LOW** |
+| 29 | Haunch Bash | swipe down-and-toward | 26 | 0.95 | 0.36 | mid, knockback 0.9 |
+| 30 | Command Grab + body slam | swipe up-and-away | 52 | 0.85 | 0.70 | **IGNORES GUARD** + knockdown |
 
 *Superseded by the rows above: MOVES rows 1-3 (Jab/Cross/Finisher), 4 (Heavy), 5 (Launcher), 6 (Sweep) and 7 (Block) as written - the moves survive under these names and numbers, and `Finisher` is now `Hook`.*
 
 **The grab's cost is range and commitment.** It is the shortest offensive option in every pairing (0.85 m baseline, still clear of every push-out floor), has the longest recovery of any normal, cannot catch an airborne body, cannot be parried, and knocks down with wake-up i-frames so it never loops. It is the answer to a player who simply holds guard - and the reason holding guard is a decision instead of a default.
 
 **Readability.** Every move has its own clip, fitted to its own window by `FighterAnimator.PlayFor` (the clips run 0.6-4.8 s while normals recover in 0.20-0.70 s; at speed 1 the fighter was still winding up after the hit resolved). `ProcAnim` gained a per-move gesture for each addition plus a **sustain** so a held crouch is a held pose. The HUD guard glyph shows *which* stance is up (teal standing / amber and dropped for crouch), and F2 gained a white grab-range tick.
+
+## DAMAGE REBALANCE (session 11, D-025 - owner directive "longer, more realistic matches")
+
+Every damage number in the tables above is **37.5% of its pre-session-11 value** - a 61.8-62.9% cut on each of the 19 moves, normals and specials alike. Two things were deliberately NOT scaled with it:
+
+- **Health stays 1000** (and the round timer stays 60 s). Cutting the bar in step would have cancelled the directive: because the bar did not move, a KO now takes **~2.5-2.7x as many landed hits** (an average normal: 13 hits -> 33), which is the entire point.
+- **Meter stays unchanged per HIT.** `MeterDealt` / `MeterTaken` in `CombatSystem` carry the reciprocal of the cut, so a segment still costs ~3.8 landed jabs. Scaling meter with damage would have made cards 2.7x rarer for 0.375x the payoff; instead they fire ~2.7x more often for 37.5% each, and specials' share of a health bar is exactly what it was.
+
+Needing no change, and getting none: **juggle decay** (a ratio - a 4-hit route is still the same share of a bar relative to every other route), the **block reduction / chip** multipliers, every **FxWeight**, and all **stun / i-frame / parry / buffer** timings (those measure reaction, and the interaction *rate* did not change - only the health each interaction removes).
+
+Changed beyond arithmetic: **combo windows widened ~17%** (chain 0.60 -> 0.70 s, light-into-heavy cancel 0.35 -> 0.42 s) because a completed string now buys 37.5% of what it did while a round holds ~2.7x more attempts - flagged in D-025 as the one judgment call, and a two-number revert. The HUD's **ghost-drain rate** was scaled by the same 0.375 (0.6 -> 0.225 fill/s), since it is a fraction-of-bar speed and small hits had made the amber "chunk lost" read nearly invisible.
+
+Modelled result: median round **20-26 s -> 42-60 s**, clean hits per round **14-17 -> 32-45**. Open risk in D-025: at the passive end of the model the 60 s timer starts producing timeouts instead of KOs, and the fix (75-99 s) touches D-013's locked format, so it awaits the owner's on-device read.
 
 ## ENEMY AI (Tengi)
 

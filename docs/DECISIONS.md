@@ -235,3 +235,28 @@ What now constrains future work:
 - Cost: **494 credits** (13 × 38), 1761 → ~1267. No failed attempts. All 13 verified to carry the shared 24-joint skeleton before placement.
 
 Unchanged by this decision: the loop (best-of-3 / 60 s / Khulandra / KO / endings), the deterministic X-axis sim and its render/sim separation, HP 1000 / 3-segment meter, the networking seam, the roster data model, and all environment art. Combat depth remains open per D-015.
+
+## D-025 — Session 11: damage rebalance for longer, tenser matches (2026-07-25, accepted — owner directive)
+
+The owner directed a rebalance for **longer, more realistic matches**: cut per-hit damage across normals *and* specials by roughly **60-65%** so rounds last noticeably longer and players get more back-and-forth before a KO; adjust health totals and/or damage scaling as needed to land in that range; and re-tune the timing that depends on damage (meter gain, juggle decay, combo windows) so the result is consistent with the new pace rather than merely slower.
+
+**Every damage number in `CombatSystem` is now 37.5% of its former value** — a 61.8–62.9% cut on each of the 19 moves (13 normals/air moves + 6 specials), i.e. the middle of the requested band, verified move by move. `CombatSystem.DamageRebalance` (0.375) records the factor and derives the meter constants from it.
+
+**Health stays at 1000.** This is the load-bearing decision: cutting HP in step would have cancelled the directive exactly. Because the bar did not move, a KO now takes **~2.5–2.7× as many landed hits** (an average normal: 13 hits → 33), and that ratio *is* the rebalance. The round timer also stays at **60 s** (D-013's locked slice format) — see the risk note below.
+
+What the rebalance preserved, deliberately, and how:
+
+- **Meter is unchanged per HIT, not per point of damage.** `MeterDealt` = 1/0.375 and `MeterTaken` = 0.9375/0.375 carry the reciprocal of the cut, so a landed jab is still worth ~40 meter and a segment still costs ~3.8 landed jabs (~4.0 taken, keeping D-018's halved on-taken rate). The alternative — letting meter scale down with the damage — would have made cards **2.7× rarer for 0.375× the payoff**, quietly deleting specials from the fight. Because a health bar now takes 2.7× more hits to remove, cards instead fire ~2.7× more often per round at 37.5% of their old damage, so **the share of a health bar lost to specials rather than normals is exactly what it was.** The parry reward (flat 40) needed no change for the same reason: it was, and still is, about one landed jab's worth of meter.
+- **Juggle decay needed no change and got none.** The 10%-per-air-hit decay is a *ratio*, so the cut carried it: a full 4-hit juggle route is still worth the same share of a bar relative to every other route (250 → 95 damage, factor 0.380 — the same factor every move took). Re-tuning the 0.1 would have changed juggle *balance*, which the rebalance did not ask for. Same reasoning for the block reduction (0.25 / 0.10 chip) and every `FxWeight`, which are per-move, not per-damage.
+- **The stun, i-frame, parry-window and buffer timings are untouched.** They measure human reaction, not health, and the interaction *rate* did not change — only the health each interaction removes.
+
+Two things did change beyond arithmetic:
+
+- **Combo windows widened ~17%** (`PlayerController.ChainWindow` 0.60 → 0.70 s, `CancelWindow` 0.35 → 0.42 s). **This is the one judgment call in the rebalance, not arithmetic.** A completed string now buys 37.5% of what it used to while a round contains ~2.7× more attempts, so leaving the windows alone would have made offence a worse deal than poking — the opposite of "more back-and-forth". Both constants are named and reverting is a two-number edit.
+- **The HP bar's ghost-drain rate was scaled by the same 0.375** (`TouchUI` 0.6 → 0.225 fill/s). This one was genuinely broken by the cut: the ghost is a *fraction-of-bar* speed, so a haymaker's amber "you just lost this much" chunk fell from ~0.2 s of visibility to ~0.07 s. Scaling it restores the same read per hit.
+
+**Projected effect** (Monte Carlo over the committed numbers, the AI's real poke weights and recoveries, and a parameterised engagement rate — the honest substitute for a playtest, not a replacement for one): median round **20–26 s → 42–60 s**, clean hits per round **14–17 → 32–45**, winner typically finishing on 14–16% health instead of ~22%.
+
+**Flagged risk, owner's call:** at the *passive* end of the model (low engagement plus a lot of neutral/approach time) the 60 s timer starts producing timeouts rather than KOs — 85–100% of rounds still end in a KO at realistic engagement, but only ~10–75% in the passive case. Raising `RoundManager.RoundSeconds` to 75 or 99 s restores KO as the outcome in every modelled case, but that constant is part of D-013's locked best-of-3 / 60 s format from the intake interview, so it was **left alone** rather than changed unilaterally. The second flagged item: cards will feel far more available (~2.7× the casts per round). If that reads as fireworks rather than earned bursts, the dial is `Fighter.MeterPerSegment` (150) or the `MeterDealt` constant.
+
+Not verified: **on-device feel.** No Android device is attached and the editor holds the project lock, so "competitive and tense, not draggy" remains the owner's confirmation step (STATUS Next-up 1 carries the protocol and the knob-per-symptom table).

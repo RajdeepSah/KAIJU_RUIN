@@ -262,14 +262,21 @@ namespace KaijuRuin
         void Update()
         {
             // Ghost health drain: lag toward the true fill.
+            //
+            // This rate is genuinely damage-coupled, and the D-025 cut broke it: the
+            // ghost is a *fraction-of-bar* speed, so when a haymaker went from 12% of
+            // the bar to 4.5%, its amber chunk went from visible for ~0.2 s to ~0.07 s
+            // — the "you just lost this much" read that the bar exists for. Scaled by
+            // the same 0.375 so a chunk lingers for the same time per hit as before.
+            const float GhostDrain = 0.225f;   // was 0.6 at the old damage numbers
             if (playerGhost != null)
             {
-                playerGhostV = Mathf.MoveTowards(playerGhostV, playerHp.fillAmount, Time.deltaTime * 0.6f);
+                playerGhostV = Mathf.MoveTowards(playerGhostV, playerHp.fillAmount, Time.deltaTime * GhostDrain);
                 playerGhost.fillAmount = playerGhostV;
             }
             if (enemyGhost != null)
             {
-                enemyGhostV = Mathf.MoveTowards(enemyGhostV, enemyHp.fillAmount, Time.deltaTime * 0.6f);
+                enemyGhostV = Mathf.MoveTowards(enemyGhostV, enemyHp.fillAmount, Time.deltaTime * GhostDrain);
                 enemyGhost.fillAmount = enemyGhostV;
             }
 

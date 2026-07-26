@@ -33,6 +33,15 @@ namespace KaijuRuin
         float chainWindowUntil;
         float normalCancelUntil;    // a connected light may cancel into a heavier normal
 
+        // Combo linking windows, widened ~17% by the D-025 rebalance (0.6 / 0.35).
+        // Honest framing: this is the one part of that rebalance that is a judgment
+        // call rather than arithmetic. A hit now removes 37.5% of the health it used
+        // to, so a completed string buys much less, and a round contains ~2.7x more
+        // attempts — leaving the windows untouched would have made offence a worse
+        // deal than poking. Revert both numbers if linking feels loose.
+        const float ChainWindow = 0.70f;    // tap-to-tap: how long the light chain stays alive
+        const float CancelWindow = 0.42f;   // connected light -> heavier normal (target combos)
+
         // Held stance from the left thumb, re-evaluated every frame by TouchInput.
         bool wantCrouch, wantBackGuard;
         bool holdGuard;             // the right-thumb hold: committed, parry-armed guard
@@ -264,7 +273,7 @@ namespace KaijuRuin
             // way to open a standing guard.
             if (Self.Crouching) { DoLegSweep(); return; }
             chainStep = (Time.time <= chainWindowUntil) ? Mathf.Min(chainStep + 1, 3) : 1;
-            chainWindowUntil = Time.time + 0.6f;
+            chainWindowUntil = Time.time + ChainWindow;
             var atk = chainStep == 1 ? CombatSystem.Jab : chainStep == 2 ? CombatSystem.Cross : CombatSystem.Hook;
             string clip = chainStep == 1 ? "clawjab" : chainStep == 2 ? "clawcross" : "clawhook";
             // Per-step escalation now rides the clip fit: each step of the chain gets
@@ -275,7 +284,7 @@ namespace KaijuRuin
             PerfMonitor.MarkImpact();
             // Pips show LANDED hits only; a whiff/blocked tap drops the chain.
             ChainHud(hit ? chainStep : 0);
-            if (hit) normalCancelUntil = Time.time + 0.35f;      // open the target-combo cancel window
+            if (hit) normalCancelUntil = Time.time + CancelWindow;   // open the target-combo cancel window
             if (!hit || chainStep == 3) chainStep = 0;
         }
 
