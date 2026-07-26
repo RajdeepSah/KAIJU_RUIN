@@ -28,6 +28,8 @@ Single-player 2D fighting game (rigged 3D characters locked to a 2D gameplay pla
 
 Screen is split into interaction zones. Every gesture routes to a named C# method on PlayerController.
 
+**Amended session 10, D-024 - the left thumb also carries STANCE, and the right thumb's swipe ring is eight-way.** The left half's horizontal drag still walks; holding *away* past half deflection also raises a standing guard (back is both retreat and block), holding *down-and-away* is the crouch guard, and holding *down* is a crouch (a stance, since it modifies attacks) - all pushed to `PlayerController.SetStance(bool crouch, bool away)` every frame the finger is down. The right half's four swipe directions became eight; the four diagonals carry the overhead claw slam, the haunch bash, the command grab and the leg sweep (`TouchInput.DiagonalRatio` = 0.55 decides diagonal vs cardinal). The right-thumb hold remains the committed, rooted, parry-armed guard - the only guard that can parry.
+
 - LEFT HALF, horizontal drag: walk toward / away from the opponent (PlayerController.Move(float axis)). Drag right of the touch origin walks forward, left walks back. Releasing stops.
 - RIGHT HALF, tap: light attack; consecutive taps chain up to 3 hits (PlayerController.TapAttack()).
 - RIGHT HALF, swipe toward opponent: heavy attack (PlayerController.HeavyAttack()).
@@ -77,11 +79,54 @@ Layered onto the SAME one-thumb control scheme; the only new gesture binding is 
 
 Feel systems (all render/timing only, never touch the deterministic sim): per-hit hit-stop scaled by move weight (light 45 ms to special 140 ms), camera shake + dolly-in punch on heavies/launchers/specials/KO, and a per-move procedural body-motion layer (ProcAnim) that gives each move a distinct silhouette on the shared rig (lunge, uppercut rise, low crouch, back-hop, air reach, character-flavoured special) at zero generation cost. Per-character feel: Kest agile (faster cadence, teal foxfire), Tengi heavy (slower, broader swings, crimson). New move VFX: vfx_dash_streak, vfx_parry_spark, vfx_impact_ring (generated) plus code-composited tints of existing sprites; all degrade gracefully if unsynced. HUD gained a combo counter and a parry cue. Full rationale and invariants: DECISIONS D-015 / D-016.
 
+## MOVES v3 - kaiju-scaled moveset + two-stance guard (session 10, D-024 - owner directive)
+
+The owner directed more variety across **kaiju-scaled** strikes (claws, tail, haunches - not human boxing form), built **together with** the guard system the mix-ups depend on, as **shared normals for the whole roster** (no per-character variants; only the CharacterDef feel knobs and measured body separate one champion's version from another's). Each move has its own generated clip (13 new clip GLBs, ASSET_MANIFEST) and its own reach/damage/recovery. Reaches are baseline (Kest) centre-to-centre values resolved per pairing exactly as in D-023.
+
+### GUARD (the co-requirement)
+
+`Fighter.GuardKind { None, Standing, Crouch }` replaces the old single block flag. One helper - `CombatSystem.GuardStops` - carries the whole rule so hit resolution, the AI and the HUD cannot disagree:
+
+| Attack class | Standing guard | Crouch guard | No guard |
+|---|---|---|---|
+| high / mid (most normals) | **blocked** (75% off, 10% chip on specials) | **blocked** | hits |
+| **LOW** (tail sweep, leg sweep) | **hits** | blocked | hits |
+| **OVERHEAD** (claw slam) | blocked | **hits** | hits |
+| **GRAB** (command grab) | **hits** | **hits** | hits |
+
+- Airborne fighters guard nothing; a clean hit **breaks** the stance (a stunned fighter no longer counts as guarding).
+- **Attacking opens you up:** the guard drops for the whole of the attack's recovery and cannot re-enter until it ends (`Fighter.OpenUpUntil` / `CanGuard`), so a stance can never be held through the strikes thrown out of it.
+- Parry (D-015, 160 ms) belongs to the **right-thumb hold only**. The held-back walking guard is cheap and cannot parry; re-arming requires a fresh press.
+
+### THE NORMALS
+
+| # | Move | Trigger | Dmg | Reach | Recovery | Guard class |
+|---|---|---|---|---|---|---|
+| 20 | Claw Jab | tap | 40 | 1.10 | 0.20 | mid |
+| 21 | Claw Cross | tap tap | 55 | 1.20 | 0.24 | mid |
+| 22 | Claw Hook (arcing) | tap tap tap | 75 | 1.15 | 0.34 | mid, knockback 0.5 |
+| 23 | Rising Claw Uppercut | swipe up | 90 | 1.35 | 0.50 | mid, launcher |
+| 24 | Overhead Claw Slam | swipe up-and-toward | 110 | 1.30 | 0.56 | **OVERHEAD** |
+| 25 | Haymaker | swipe toward | 120 | 1.60 | 0.62 | mid, knockback 1.5 |
+| 26 | Tail Roundhouse | crouch + swipe toward | 100 | 1.75 | 0.54 | mid, knockback 1.2, **longest normal** |
+| 27 | Low Tail Sweep | swipe down | 80 | 1.45 | 0.50 | **LOW** + knockdown |
+| 28 | Low Leg Sweep | swipe down-and-away, or tap while crouching | 55 | 1.15 | 0.32 | **LOW** |
+| 29 | Haunch Bash | swipe down-and-toward | 70 | 0.95 | 0.36 | mid, knockback 0.9 |
+| 30 | Command Grab + body slam | swipe up-and-away | 140 | 0.85 | 0.70 | **IGNORES GUARD** + knockdown |
+
+*Superseded by the rows above: MOVES rows 1-3 (Jab/Cross/Finisher), 4 (Heavy), 5 (Launcher), 6 (Sweep) and 7 (Block) as written - the moves survive under these names and numbers, and `Finisher` is now `Hook`.*
+
+**The grab's cost is range and commitment.** It is the shortest offensive option in every pairing (0.85 m baseline, still clear of every push-out floor), has the longest recovery of any normal, cannot catch an airborne body, cannot be parried, and knocks down with wake-up i-frames so it never loops. It is the answer to a player who simply holds guard - and the reason holding guard is a decision instead of a default.
+
+**Readability.** Every move has its own clip, fitted to its own window by `FighterAnimator.PlayFor` (the clips run 0.6-4.8 s while normals recover in 0.20-0.70 s; at speed 1 the fighter was still winding up after the hit resolved). `ProcAnim` gained a per-move gesture for each addition plus a **sustain** so a held crouch is a held pose. The HUD guard glyph shows *which* stance is up (teal standing / amber and dropped for crouch), and F2 gained a white grab-range tick.
+
 ## ENEMY AI (Tengi)
 
 State machine in EnemyAI.cs: APPROACH, POKE (lights/heavy mix), PUNISH (whiffed player heavy triggers counter window), DEFEND, SPEND (S1 at 1 seg as a close interrupt, S2 at 2 seg as the ranged answer, S3 at 3 seg on a knockdown). Difficulty ramps per round: reaction delay 320 ms round 1, 260 ms round 2, 200 ms round 3; block rate +10 percent per round (45 percent base).
 
-**Amended session 9, D-023 — spacing is computed, not hardcoded.** Decisions stay on the reaction-delay tick but **locomotion runs every frame** (it used to live inside the tick, walking one frame in ~19). Every distance the AI acts on is derived from `CombatSystem.EffectiveReach` for the live pairing instead of a literal: APPROACH walks to just inside its own jab reach; POKE draws from the moves that actually reach, weighted 50/22/14/14 (jab / launcher / sweep / heavy) among those in range; DEFEND blocks only inside the opponent's threat reach; SPEND requires the card to reach (Kest's slot 1 exempt — it closes the gap itself); and the AI never loiters in the gap where the opponent's longest normal covers it and none of its own cover them, committing forward or stepping out. A per-round `IdleChance` (0.22 / 0.16 / 0.10) leaves punishable gaps between pokes. *Superseded: "APPROACH (walk to 1.4 m) … DEFEND (blocks 45 percent of incoming strings, drops block vs sweeps 30 percent)" as literal distances.*
+**Amended session 9, D-023 — spacing is computed, not hardcoded.** Decisions stay on the reaction-delay tick but **locomotion runs every frame** (it used to live inside the tick, walking one frame in ~19). Every distance the AI acts on is derived from `CombatSystem.EffectiveReach` for the live pairing instead of a literal: APPROACH walks to just inside its own jab reach; POKE draws from the moves that actually reach, weighted 50/22/14/14 (jab / launcher / sweep / heavy) among those in range; DEFEND blocks only inside the opponent's threat reach; SPEND requires the card to reach (Kest's slot 1 exempt — it closes the gap itself); and the AI never loiters in the gap where the opponent's longest normal covers it and none of its own cover them, committing forward or stepping out. A per-round `IdleChance` (0.22 / 0.16 / 0.10) leaves punishable gaps between pokes.
+
+**Amended session 10, D-024 - the AI plays the same game the player does.** POKE now draws from all ten shared normals (still reach-gated), DEFEND takes its guard in **either stance** and chooses which by READING the opponent - whatever hit it last is what it braces against (`Fighter.LastAttackLow` / `LastAttackOverhead`), so leaning on one half of the mix-up gets answered. New **MIX-UP** state: against a held guard it reaches for the tool that beats that stance - overhead vs crouch, low vs standing, grab vs either - at a per-round `MixupRate` (0.45 / 0.65 / 0.85), falling through to normal spacing when nothing that beats the stance is in range (so a turtle it cannot reach never freezes it). Crouch-stance share of its own guards: `CrouchGuardRate` 0.25 / 0.35 / 0.45 by round. *Superseded: "APPROACH (walk to 1.4 m) … DEFEND (blocks 45 percent of incoming strings, drops block vs sweeps 30 percent)" as literal distances.*
 
 ## ROUND / MATCH STRUCTURE
 

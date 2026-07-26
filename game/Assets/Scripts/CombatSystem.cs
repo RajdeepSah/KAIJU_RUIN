@@ -18,7 +18,10 @@ namespace KaijuRuin
             public float Recovery;
             public float Knockback;
             public float StepIn;    // forward drive on use (aggressive flow)
-            public bool Low;        // beats standing block (sweep)
+            public bool Low;        // hits low: beats STANDING guard, stopped by crouch guard
+            public bool Overhead;   // comes down from above: beats CROUCH guard, stopped by standing guard
+            public bool Grab;       // ignores guard entirely; cannot catch an airborne body
+            public bool Knockdown;  // floors the target (long stun + wake-up i-frames)
             public bool Launch;     // pops / keeps the target airborne
             public FxWeight Fx;     // hit-stop + shake profile
             public string Vfx;      // sprite under Resources/Art/vfx, optional (marks a special)
@@ -52,10 +55,12 @@ namespace KaijuRuin
         public static float StrikeExtent(Fighter attacker, Attack atk)
             => atk.Reach + attacker.ArmReach - BaselineArm - BaselineHurt;
 
-        // The longest normal `attacker` can threaten `target` with (Heavy today).
-        // The AI's spacing reads this to know when it is standing in danger.
+        // The longest normal `attacker` can threaten `target` with. The AI's spacing
+        // reads this to know when it is standing in danger, and the ground cues draw
+        // it, so it must stay the actual maximum over the normals below (the tail
+        // roundhouse outranges the haymaker since D-024).
         public static float ThreatReach(Fighter attacker, Fighter target)
-            => EffectiveReach(attacker, target, Heavy);
+            => EffectiveReach(attacker, target, LongestNormal);
 
         public static bool InRange(Fighter attacker, Fighter target, Attack atk)
             => target != null && !target.Dead && InFront(attacker, target)
@@ -103,13 +108,49 @@ namespace KaijuRuin
             f.transform.position = p;
         }
 
-        // Universal normals (recoveries trimmed from v1 for a faster fight, D-015).
-        public static readonly Attack Jab      = new Attack { Name = "Jab",      Damage = 40,  Reach = 1.1f, Recovery = 0.20f, StepIn = 0.06f, Fx = FxWeight.Light,  Sfx = "hit_light" };
-        public static readonly Attack Cross    = new Attack { Name = "Cross",    Damage = 50,  Reach = 1.1f, Recovery = 0.20f, StepIn = 0.08f, Fx = FxWeight.Light,  Sfx = "hit_light" };
-        public static readonly Attack Finisher = new Attack { Name = "Finisher", Damage = 70,  Reach = 1.1f, Recovery = 0.38f, Knockback = 0.6f, StepIn = 0.12f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
-        public static readonly Attack Heavy    = new Attack { Name = "Heavy",    Damage = 120, Reach = 1.6f, Recovery = 0.62f, Knockback = 1.5f, StepIn = 0.22f, Fx = FxWeight.Heavy,  Sfx = "hit_heavy" };
-        public static readonly Attack Launcher = new Attack { Name = "Launcher", Damage = 90,  Reach = 1.35f,Recovery = 0.50f, StepIn = 0.12f, Launch = true, Fx = FxWeight.Launch, Sfx = "hit_heavy" };
-        public static readonly Attack Sweep    = new Attack { Name = "Sweep",    Damage = 80,  Reach = 1.35f,Recovery = 0.50f, StepIn = 0.20f, Low = true,    Fx = FxWeight.Medium, Sfx = "hit_light" };
+        // ---- Universal normals ----------------------------------------------
+        // Shared by the whole roster (no per-character variants): only the feel
+        // knobs on CharacterDef — cadence, walk, body metrics, procedural amplitude
+        // — separate one champion's version of a move from another's.
+        //
+        // Recoveries were trimmed from v1 for a faster fight (D-015). Session 10
+        // (D-024) widened the set to kaiju-scaled claw / tail / haunch strikes plus a
+        // guard-breaking grab, and every move now declares how it interacts with
+        // guard: nothing (a mid), Low, Overhead, or Grab. Reaches remain
+        // centre-to-centre distances quoted for Kest's measured body (D-023).
+        //
+        // The guard triangle these numbers exist to serve:
+        //   standing guard  <- beaten by Low (tail sweep, leg sweep) and by Grab
+        //   crouch guard    <- beaten by Overhead (claw slam) and by Grab
+        //   no guard        <- beaten by everything, hardest by the haymaker
+        public static readonly Attack Jab      = new Attack { Name = "Claw Jab",      Damage = 40,  Reach = 1.10f, Recovery = 0.20f, StepIn = 0.06f, Fx = FxWeight.Light,  Sfx = "hit_light" };
+        public static readonly Attack Cross    = new Attack { Name = "Claw Cross",    Damage = 55,  Reach = 1.20f, Recovery = 0.24f, StepIn = 0.10f, Fx = FxWeight.Light,  Sfx = "hit_light" };
+        public static readonly Attack Hook     = new Attack { Name = "Claw Hook",     Damage = 75,  Reach = 1.15f, Recovery = 0.34f, Knockback = 0.5f, StepIn = 0.12f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
+        public static readonly Attack Launcher = new Attack { Name = "Rising Claw",   Damage = 90,  Reach = 1.35f, Recovery = 0.50f, StepIn = 0.12f, Launch = true, Fx = FxWeight.Launch, Sfx = "hit_heavy" };
+        public static readonly Attack Slam     = new Attack { Name = "Claw Slam",     Damage = 110, Reach = 1.30f, Recovery = 0.56f, Knockback = 0.8f, StepIn = 0.14f, Overhead = true, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+        public static readonly Attack Heavy    = new Attack { Name = "Haymaker",      Damage = 120, Reach = 1.60f, Recovery = 0.62f, Knockback = 1.5f, StepIn = 0.22f, Fx = FxWeight.Heavy,  Sfx = "hit_heavy" };
+        public static readonly Attack TailRound= new Attack { Name = "Tail Roundhouse",Damage = 100,Reach = 1.75f, Recovery = 0.54f, Knockback = 1.2f, StepIn = 0.16f, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+        public static readonly Attack Sweep    = new Attack { Name = "Tail Sweep",    Damage = 80,  Reach = 1.45f, Recovery = 0.50f, StepIn = 0.20f, Low = true, Knockdown = true, Fx = FxWeight.Medium, Sfx = "hit_light" };
+        public static readonly Attack LegSweep = new Attack { Name = "Leg Sweep",     Damage = 55,  Reach = 1.15f, Recovery = 0.32f, StepIn = 0.14f, Low = true,    Fx = FxWeight.Light,  Sfx = "hit_light" };
+        public static readonly Attack Bash     = new Attack { Name = "Haunch Bash",   Damage = 70,  Reach = 0.95f, Recovery = 0.36f, Knockback = 0.9f, StepIn = 0.08f, Fx = FxWeight.Medium, Sfx = "hit_heavy" };
+
+        // Command grab: the answer to a fighter who simply holds guard. Ignores both
+        // stances, so its cost is range and commitment — it reaches barely past the
+        // push boxes and its whiff is the longest recovery of any normal.
+        public static readonly Attack Grab     = new Attack { Name = "Command Grab",  Damage = 140, Reach = 0.85f, Recovery = 0.70f, Knockback = 1.0f, Grab = true, Knockdown = true, Fx = FxWeight.Heavy, Sfx = "hit_heavy" };
+
+        // The longest normal in the set — the AI's threat radius and the outer ground
+        // band both read this rather than naming a move.
+        public static readonly Attack LongestNormal = TailRound;
+
+        // Does `target`'s held stance stop this attack? The mirror the mix-up rests
+        // on: a low goes under a standing guard, an overhead comes over a crouching
+        // one, a grab ignores both, and an airborne fighter guards nothing.
+        public static bool GuardStops(Fighter target, Attack atk)
+        {
+            if (!target.Blocking || target.Airborne || atk.Grab) return false;
+            return target.Guard == Fighter.GuardKind.Crouch ? !atk.Overhead : !atk.Low;
+        }
 
         // Air-juggle follow-ups (used only while the target is airborne, D-015).
         public static readonly Attack AirRake  = new Attack { Name = "Air Rake",  Damage = 55, Reach = 1.4f, Recovery = 0.30f, StepIn = 0.10f, Launch = true, Fx = FxWeight.Medium, Sfx = "hit_light" };
@@ -150,6 +191,11 @@ namespace KaijuRuin
             // Recovery scaled by the attacker's cadence (per-character + global speed-up).
             float recovery = atk.Recovery / Mathf.Max(0.5f, attacker.AttackSpeed);
             attacker.AttackLockUntil = Time.time + recovery;
+            // Swinging opens you up: the guard drops for the whole recovery, so a
+            // stance can never be held through the attacks thrown out of it (D-024).
+            attacker.OpenUpUntil(attacker.AttackLockUntil);
+            attacker.LastAttackLow = atk.Low;
+            attacker.LastAttackOverhead = atk.Overhead;
 
             var target = attacker.Opponent;
             if (target == null || target.Dead) return false;
@@ -159,7 +205,9 @@ namespace KaijuRuin
             // A low sweep also passes harmlessly under a juggled opponent, who is now
             // visibly off the ground (ProcAnim lift) — a low that hit an airborne body
             // was the most obvious phantom hit in the slice.
-            if (!InRange(attacker, target, atk) || (atk.Low && target.Airborne))
+            // A grab closes on a body that is standing there to be seized; a juggled
+            // one is not, so it whiffs like a low passing under an airborne fighter.
+            if (!InRange(attacker, target, atk) || ((atk.Low || atk.Grab) && target.Airborne))
             {
                 // Whiff: readable answer so "I missed and I'm exposed" is felt.
                 AudioManager.I?.Sfx("whiff", 0.4f);   // soft-fails until the clip exists
@@ -188,7 +236,7 @@ namespace KaijuRuin
             attacker.Proc?.Contact();
 
             var impact = ImpactPoint(attacker, target, atk);
-            bool blocked = target.Blocking && !atk.Low && !target.Airborne;
+            bool blocked = GuardStops(target, atk);
             bool parried = blocked && target.ParryArmed && (Time.time - target.BlockStartedAt) <= ParryWindow;
 
             if (parried)
@@ -229,8 +277,21 @@ namespace KaijuRuin
                 bool keepAir = atk.Launch && (!wasAirborne || target.JuggleCount < MaxJuggle);
 
                 AudioManager.I?.Sfx(atk.Sfx);
-                target.StunUntil = Time.time + (keepAir ? 0.7f : (atk.Launch ? 0.5f : 0.35f));
+                // A knockdown (grab throw, tail sweep) floors the target for longer
+                // than a normal hit — that long stun is what makes the mix-up worth
+                // landing, and the wake-up i-frames below are what stop it looping.
+                bool floored = atk.Knockdown && !keepAir;
+                target.StunUntil = Time.time + (keepAir ? 0.7f : floored ? 0.80f : (atk.Launch ? 0.5f : 0.35f));
                 target.Airborne = keepAir;
+                // Being hit cleanly breaks the stance: without this a stunned fighter
+                // still counts as guarding, and the next hit of the string reads as
+                // blocked by someone who is being knocked across the harbor.
+                if (!keepAir) target.OpenUpUntil(target.StunUntil);
+                if (floored)
+                {
+                    target.JuggleCount = 0;
+                    target.InvulnUntil = target.StunUntil;   // wake-up i-frames, as on a juggle end
+                }
                 if (!keepAir && wasAirborne)
                 {
                     // Juggle ended (knockdown): grant wake-up i-frames lasting the
@@ -303,7 +364,9 @@ namespace KaijuRuin
             float dir = attacker.FacingRight ? 1f : -1f;
             float x = target.transform.position.x - dir * target.HurtDepth * 0.85f;
             float y = atk.Low ? target.ChestY * 0.42f
+                    : atk.Overhead ? target.ChestY * 1.28f      // lands on the head/shoulders
                     : atk.Launch ? target.ChestY * 1.08f
+                    : atk.Grab ? target.ChestY * 0.88f          // seized around the body
                     : target.ChestY;
             return new Vector3(x, y + target.Lift, 0f);
         }

@@ -179,3 +179,59 @@ Kest's 0.78 + 0.32 = **1.10 m** is exactly the brief's jab reach, so **Kest is t
 **Balance consequence to feel out (owner):** Tengi now genuinely out-ranges Kest at every normal (jab 1.46 vs 1.24, heavy 1.96 vs 1.74 against each other), and a Tengi mirror jabs from 1.60 m. That is what the models measure, and it makes his "reach and punish" tagline literal rather than cosmetic; Kest's answers are speed (`AttackSpeed` 1.12, walk 3.1) and the Fox-fire Dash. If the matchup reads badly on device, the knobs are `HurtDepth`/`ArmReach` in `CharacterDef` — not the per-move reaches, which are now anatomy.
 
 **Validated:** all **35 scripts** compile clean under Unity 6000.0.78f1 Roslyn (0 errors). The distance model was checked numerically for every move × all four pairings: every move's effective reach clears the push-out floor (so nothing is unusable point-blank), the AI's hold/back-off targets sit inside its own poke range and outside the opponent's threat, and the step-in and dash-in gaps land inside jab range. Visual confirmation — that the drawn boundaries agree with the rendered poses, which depend on the idle clip's actual root offset and cannot be read offline — is the owner's on-device step (STATUS Next-up 1).
+
+## D-024 — Session 10: kaiju-scaled moveset + the two-stance guard it plays against (2026-07-25, accepted — owner directive)
+
+The owner directed an expansion of the moveset "with more variety across kaiju-scaled strikes, built **together with** the guard system these mix-ups depend on", with an explicit scope line: **all as new shared normals for the full roster — same moveset across all characters, no per-character variants**, each generated as a GLB via the D-011 Meshy rig-action pipeline, posed and reached to **kaiju proportions (claws, tail, haunches), not human boxing form**, and wired into `CombatSystem` with its own reach/speed/damage/meter values. The owner also stated the design logic this decision is built on: *without guard, the grapple and the low/overhead pair are just normal attacks with no strategic purpose.*
+
+### The guard system (the co-requirement, built first)
+
+`Fighter.Blocking` was a single bool. It is now a stance — `Fighter.GuardKind { None, Standing, Crouch }` — with `Blocking` kept as the "guarding at all" read so no existing call site changed meaning. The rules, exactly as the owner specified them:
+
+- **Standing guard** stops highs and mids. It does **not** stop lows.
+- **Crouch guard** stops lows (and mids). It does **not** stop overheads.
+- **A grab ignores both.** Nothing blocks it; only distance answers it.
+- An airborne fighter guards nothing, and a clean hit **breaks the stance** (a stunned fighter no longer counts as guarding — previously the next hit of a string would have read as blocked by someone being knocked across the harbor).
+
+One helper carries the whole mirror (`CombatSystem.GuardStops`), so the rule cannot drift between hit resolution, the AI and the HUD.
+
+**Attacking opens you up.** `Fighter.OpenUpUntil` drops the guard for the whole of an attack's recovery and forbids re-entry until it ends (`CanGuard`). Without it, crouch guard would be a free stance to throw lows from behind.
+
+**Bindings.** The owner's spec is directional-guard language ("hold the direction away", "hold down-back"); this is a one-thumb touch game, so it maps to the thumb that already owns direction — the LEFT one, which previously only walked:
+
+- hold **away** → walk back *with* a standing guard up (back is both retreat and block in any 2D fighter, so retreat is not lost);
+- hold **down-back** → crouch guard (rooted);
+- hold **down** → crouch, no guard (a stance, because it modifies attacks);
+- the existing **right-thumb hold** stays the committed, rooted, **parry-armed** guard — the only guard that can parry. The walking guard is deliberately cheap and deliberately cannot.
+
+### The moveset (11 shared normals, no per-character variants)
+
+Reaches are centre-to-centre baseline (Kest) values per D-023; the fight resolves each per pairing. `Finisher` is renamed `Hook`; `Heavy` is the haymaker and `Sweep` the tail sweep, keeping their code names.
+
+| Move | Trigger | Dmg | Reach | Recovery | Guard class |
+|---|---|---|---|---|---|
+| Claw Jab | tap | 40 | 1.10 | 0.20 | mid |
+| Claw Cross | tap tap | 55 | 1.20 | 0.24 | mid |
+| Claw Hook | tap tap tap | 75 | 1.15 | 0.34 | mid |
+| Rising Claw (launcher) | swipe up | 90 | 1.35 | 0.50 | mid |
+| Overhead Claw Slam | swipe up-and-toward | 110 | 1.30 | 0.56 | **OVERHEAD** |
+| Haymaker | swipe toward | 120 | 1.60 | 0.62 | mid |
+| Tail Roundhouse | **crouch** + swipe toward | 100 | 1.75 | 0.54 | mid (longest normal) |
+| Low Tail Sweep | swipe down | 80 | 1.45 | 0.50 | **LOW** + knockdown |
+| Low Leg Sweep | swipe down-and-away, or tap while crouching | 55 | 1.15 | 0.32 | **LOW** |
+| Haunch Bash | swipe down-and-toward | 70 | 0.95 | 0.36 | mid |
+| Command Grab | swipe up-and-away | 140 | 0.85 | 0.70 | **IGNORES GUARD** + knockdown |
+
+The right thumb's four swipe directions became **eight**; the four diagonals carry the additions. A swipe reads as a diagonal only when its shorter axis is ≥ `TouchInput.DiagonalRatio` (0.55) of its longer, so a sloppy cardinal still fires the cardinal it meant. No new *kind* of gesture was introduced, and Pillar 3 (one thumb) holds: every attack is still a right-thumb tap, swipe or hold.
+
+What now constrains future work:
+
+- **The grab's cost is range and commitment, not blockability.** It reaches 0.85 m baseline — verified as the shortest offensive option in all four pairings, while still clearing every push-out floor — and has the longest recovery of any normal (0.70 s). It cannot catch an airborne body, cannot be parried, and knocks down with wake-up i-frames so it never loops.
+- **`CombatSystem.LongestNormal`** (the tail roundhouse today) replaces "Heavy" as the AI's threat radius and the outer ground band. Adding a longer normal means updating that one field, not hunting literals.
+- **The AI plays the same game.** `EnemyAI` draws from all 10 normals (reach-gated as in D-023), takes its guards in **either** stance, and has a mix-up brain: against a held guard it reaches for the tool that beats *that* stance — overhead vs crouch, low vs standing, grab vs either — at a per-round `MixupRate` (0.45 / 0.65 / 0.85). Its stance choice is a **read**: whatever hit it last is what it braces against (`Fighter.LastAttackLow/LastAttackOverhead`), so leaning on one half of the mix-up gets answered.
+- **Clips are fitted to their move's window.** All 13 new clips are wired in `RoundManager.ClipFiles`, and `FighterAnimator.PlayFor` scales each to its move's recovery (clamped 1–6×). At speed 1 a jab showed the first ~10% of a 2 s clip — the fighter was still winding up after the hit had resolved, which is what made the old moveset read as one animation. **The session-8 four (airrake/airslam/parry/backdash) remain unwired** — that is still the owner's on-device call.
+- **The stance must be visible or the mix-up is a coin flip.** The HUD guard glyph now shows *which* guard is up (teal standing / amber, dropped, for crouch), `ProcAnim` gained a **sustain** so a held crouch is a held pose rather than a twitch, and the F2 overlay gained a white **grab-range** tick — the boundary a player most needs to feel, since guard cannot answer inside it.
+- **Rig actions were chosen by watching them.** Every candidate's preview GIF was downloaded and montaged into contact sheets before picking (details in the ASSET_MANIFEST generation record). This is how the crouch-guard clip was found — **Block10** is the only Block variant that sinks into a low braced stance and holds it — and it is now the pipeline expectation for action picks, not name-matching.
+- Cost: **494 credits** (13 × 38), 1761 → ~1267. No failed attempts. All 13 verified to carry the shared 24-joint skeleton before placement.
+
+Unchanged by this decision: the loop (best-of-3 / 60 s / Khulandra / KO / endings), the deterministic X-axis sim and its render/sim separation, HP 1000 / 3-segment meter, the networking seam, the roster data model, and all environment art. Combat depth remains open per D-015.

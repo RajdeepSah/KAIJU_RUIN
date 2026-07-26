@@ -33,6 +33,8 @@ namespace KaijuRuin
         public float ParryChance = 0f;      // chance a defend becomes an armed read-parry
         public float DashChance = 0.10f;    // chance to back-dash out of pressure
         public float IdleChance = 0.22f;    // chance to space instead of poking on a tick
+        public float MixupRate = 0.55f;     // chance to answer a held guard with the tool that beats it (D-024)
+        public float CrouchGuardRate = 0.35f;  // share of its guards taken in the crouch stance
 
         // Walking intent: chosen on a think tick, driven every frame.
         enum Intent { Hold, Advance, Retreat }
@@ -44,22 +46,30 @@ namespace KaijuRuin
         float backOffAt = 2.0f;     // stop retreating here — just outside their heavy
 
         // The poke mix, as weights over moves that must first pass a reach check.
-        // With everything available this reproduces the old 50/22/14/14 spread; as
-        // the gap opens the short tools simply drop out of the draw.
+        // As the gap opens the short tools simply drop out of the draw. Widened to
+        // the full D-024 normal set: the AI has to use the same moveset the player
+        // does, or the guard rules only bind one side of the fight.
         struct Poke
         {
             public CombatSystem.Attack Atk;
             public float Weight;
             public float Speed;
+            public string Clip;
             public ProcAnim.Move Gesture;
         }
 
         static readonly Poke[] Pokes =
         {
-            new Poke { Atk = CombatSystem.Jab,      Weight = 0.50f, Speed = 1.1f, Gesture = ProcAnim.Move.Jab },
-            new Poke { Atk = CombatSystem.Launcher, Weight = 0.22f, Speed = 0.9f, Gesture = ProcAnim.Move.Launcher },
-            new Poke { Atk = CombatSystem.Sweep,    Weight = 0.14f, Speed = 0.9f, Gesture = ProcAnim.Move.Sweep },
-            new Poke { Atk = CombatSystem.Heavy,    Weight = 0.14f, Speed = 0.8f, Gesture = ProcAnim.Move.Heavy },
+            new Poke { Atk = CombatSystem.Jab,       Weight = 0.26f, Speed = 1.1f,  Clip = "clawjab",    Gesture = ProcAnim.Move.Jab },
+            new Poke { Atk = CombatSystem.Cross,     Weight = 0.12f, Speed = 1.05f, Clip = "clawcross",  Gesture = ProcAnim.Move.Cross },
+            new Poke { Atk = CombatSystem.Hook,      Weight = 0.10f, Speed = 1f,    Clip = "clawhook",   Gesture = ProcAnim.Move.Hook },
+            new Poke { Atk = CombatSystem.Launcher,  Weight = 0.13f, Speed = 0.9f,  Clip = "clawupper",  Gesture = ProcAnim.Move.Launcher },
+            new Poke { Atk = CombatSystem.Slam,      Weight = 0.07f, Speed = 0.85f, Clip = "clawslam",   Gesture = ProcAnim.Move.Slam },
+            new Poke { Atk = CombatSystem.Heavy,     Weight = 0.10f, Speed = 0.8f,  Clip = "haymaker",   Gesture = ProcAnim.Move.Heavy },
+            new Poke { Atk = CombatSystem.TailRound, Weight = 0.09f, Speed = 0.95f, Clip = "tailround",  Gesture = ProcAnim.Move.TailRound },
+            new Poke { Atk = CombatSystem.Sweep,     Weight = 0.08f, Speed = 0.9f,  Clip = "tailsweep",  Gesture = ProcAnim.Move.Sweep },
+            new Poke { Atk = CombatSystem.LegSweep,  Weight = 0.07f, Speed = 1.1f,  Clip = "legsweep",   Gesture = ProcAnim.Move.LegSweep },
+            new Poke { Atk = CombatSystem.Bash,      Weight = 0.08f, Speed = 1.05f, Clip = "haunchbash", Gesture = ProcAnim.Move.Bash },
         };
 
         readonly float[] pokeWeights = new float[Pokes.Length];
@@ -74,7 +84,7 @@ namespace KaijuRuin
             if (foe == null) { Self.MoveAxis(0f); return; }
             Self.Face(foe);
 
-            if (Self.Blocking && Time.time >= blockUntil) SetBlock(false, false);
+            if (Self.Blocking && Time.time >= blockUntil) SetGuard(Fighter.GuardKind.None, false);
 
             if (Time.time >= nextThinkAt)
             {
@@ -103,6 +113,7 @@ namespace KaijuRuin
                 { Cast(CombatSystem.AirSlam, "punch", 0.9f, ProcAnim.Move.AirSlam); return; }
                 if (CombatSystem.InRange(Self, foe, CombatSystem.AirRake))
                 { Cast(CombatSystem.AirRake, "punch", 1.1f, ProcAnim.Move.AirRake); return; }
+
                 SetIntent(Intent.Advance);
                 return;
             }
@@ -114,7 +125,14 @@ namespace KaijuRuin
             if (foeAttacking && dist <= threat + 0.15f && Random.value < BlockRate)
             {
                 bool parry = Round >= 2 && Random.value < ParryChance;
-                SetBlock(true, parry);
+                // Which stance to take is a READ, not a coin flip: what hit him last
+                // is what he braces against, so a player who leans on lows gets
+                // crouch-guarded (and their overhead starts working, and vice versa).
+                var kind = foe.LastAttackLow ? Fighter.GuardKind.Crouch
+                         : foe.LastAttackOverhead ? Fighter.GuardKind.Standing
+                         : Random.value < CrouchGuardRate ? Fighter.GuardKind.Crouch
+                         : Fighter.GuardKind.Standing;
+                SetGuard(kind, parry);
                 blockUntil = Time.time + (parry ? 0.22f : 0.5f);
                 return;
             }
@@ -132,15 +150,21 @@ namespace KaijuRuin
             // card burns 1-3 segments, so this is the most expensive misread there is).
             if (TrySpecial(foe, dist, poke)) return;
 
+            // MIX-UP: a held guard is a stance, not a wall — answer it with the tool
+            // that beats the one they are actually in (D-024). Without this the low /
+            // overhead pair and the grab would exist only on the player's side, and
+            // holding guard against Tengi would be free.
+            if (foe.Blocking && Random.value < MixupRate && TryMixup(foe)) return;
+
             // PUNISH: opponent stuck in recovery, inside our heaviest answer.
             if (foeAttacking && CombatSystem.InRange(Self, foe, CombatSystem.Heavy))
-            { Cast(CombatSystem.Heavy, "punch", 0.8f, ProcAnim.Move.Heavy); return; }
+            { Cast(CombatSystem.Heavy, "haymaker", 0.8f, ProcAnim.Move.Heavy); return; }
 
             // Space out instead of poking on every single tick: an unbroken wall of
             // normals is neither readable nor punishable. Only rolled when something
-            // WOULD have reached (Heavy is the longest normal), so it can never stall
-            // an approach — standing still out of range is the one thing to avoid.
-            bool anythingReaches = CombatSystem.InRange(Self, foe, CombatSystem.Heavy);
+            // WOULD have reached (the longest normal), so it can never stall an
+            // approach — standing still out of range is the one thing to avoid.
+            bool anythingReaches = CombatSystem.InRange(Self, foe, CombatSystem.LongestNormal);
             if (anythingReaches && Random.value < IdleChance) { SetIntent(Intent.Hold); return; }
 
             // POKE with whatever reaches from here.
@@ -151,6 +175,32 @@ namespace KaijuRuin
             // commit forward or leave it, never sit in it.
             if (dist <= threat + 0.10f) SetIntent(Random.value < 0.65f ? Intent.Advance : Intent.Retreat);
             else SetIntent(Intent.Advance);
+        }
+
+        // Beat the stance in front of us: grab ignores both guards, an overhead comes
+        // over a crouch, a low goes under a stand. Returns false when nothing that
+        // beats it is in range — the caller then falls through to normal spacing, so
+        // this never freezes him in front of a turtle he cannot reach.
+        bool TryMixup(Fighter foe)
+        {
+            if (CombatSystem.InRange(Self, foe, CombatSystem.Grab) && Random.value < 0.5f)
+            { CastGrab(); return true; }
+
+            if (foe.Guard == Fighter.GuardKind.Crouch)
+            {
+                if (CombatSystem.InRange(Self, foe, CombatSystem.Slam))
+                { Cast(CombatSystem.Slam, "clawslam", 0.85f, ProcAnim.Move.Slam); return true; }
+                return false;
+            }
+
+            bool longFirst = Random.value < 0.55f;
+            if (longFirst && CombatSystem.InRange(Self, foe, CombatSystem.Sweep))
+            { Cast(CombatSystem.Sweep, "tailsweep", 0.9f, ProcAnim.Move.Sweep); return true; }
+            if (CombatSystem.InRange(Self, foe, CombatSystem.LegSweep))
+            { Cast(CombatSystem.LegSweep, "legsweep", 1.1f, ProcAnim.Move.LegSweep); return true; }
+            if (CombatSystem.InRange(Self, foe, CombatSystem.Sweep))
+            { Cast(CombatSystem.Sweep, "tailsweep", 0.9f, ProcAnim.Move.Sweep); return true; }
+            return false;
         }
 
         // Weighted draw over the normals whose effective reach covers the gap.
@@ -169,11 +219,11 @@ namespace KaijuRuin
             {
                 if (pokeWeights[i] <= 0f) continue;
                 r -= pokeWeights[i];
-                if (r <= 0f) { Cast(Pokes[i].Atk, "punch", Pokes[i].Speed, Pokes[i].Gesture); return true; }
+                if (r <= 0f) { Cast(Pokes[i].Atk, Pokes[i].Clip, Pokes[i].Speed, Pokes[i].Gesture); return true; }
             }
             // Float drift only: fall back to the longest tool that reached.
             for (int i = Pokes.Length - 1; i >= 0; i--)
-                if (pokeWeights[i] > 0f) { Cast(Pokes[i].Atk, "punch", Pokes[i].Speed, Pokes[i].Gesture); return true; }
+                if (pokeWeights[i] > 0f) { Cast(Pokes[i].Atk, Pokes[i].Clip, Pokes[i].Speed, Pokes[i].Gesture); return true; }
             return false;
         }
 
@@ -235,10 +285,13 @@ namespace KaijuRuin
         }
 
         // Normals only (specials go through CastSpecial so cost/selection stay data-driven).
+        // The clip is fitted to the move's recovery, same rule as the player's, so the
+        // two sides of the fight telegraph at the same rate — an AI whose wind-ups are
+        // slower than its hits is unreadable, which reads to a player as unfair.
         void Cast(CombatSystem.Attack atk, string animState, float speed, ProcAnim.Move g)
         {
             SetIntent(Intent.Hold);            // committed: hold the ground we struck from
-            Self.Anim?.Play(animState, 0.05f, speed);
+            Self.Anim?.PlayFor(animState, atk.Recovery / Mathf.Max(0.5f, Self.AttackSpeed) * 1.5f / Mathf.Max(0.5f, speed));
             Self.Proc?.Play(g);
             CombatSystem.Resolve(Self, atk);
             TouchUI.I?.RefreshBars();
@@ -264,10 +317,45 @@ namespace KaijuRuin
             TouchUI.I?.RefreshBars();
         }
 
-        void SetBlock(bool held, bool armed)
+        // Enter a guard stance (or leave it with GuardKind.None). The crouch stance
+        // gets the crouch-guard clip and holds its procedural sink; the standing one
+        // keeps the block clip.
+        void SetGuard(Fighter.GuardKind kind, bool armed)
         {
-            if (held) { Self.BeginBlock(armed); Self.Anim?.Play("block", 0.08f); Self.Proc?.Play(ProcAnim.Move.Parry); }
-            else { Self.EndBlock(); Self.Anim?.Play("idle", 0.15f); }
+            if (kind == Fighter.GuardKind.None)
+            {
+                Self.EndGuard();
+                Self.Proc?.Release();
+                Self.Anim?.Play("idle", 0.15f);
+                return;
+            }
+            Self.BeginGuard(kind, armed, false);
+            if (kind == Fighter.GuardKind.Crouch)
+            {
+                Self.Anim?.Play("crouchguard", 0.10f);
+                Self.Proc?.Hold(ProcAnim.Move.Crouch);
+            }
+            else
+            {
+                Self.Anim?.Play("block", 0.08f);
+                Self.Proc?.Play(ProcAnim.Move.Parry);
+            }
+        }
+
+        // Grab: seize, then slam on a catch (mirrors PlayerController.DoGrab).
+        void CastGrab()
+        {
+            SetIntent(Intent.Hold);
+            float window = CombatSystem.Grab.Recovery / Mathf.Max(0.5f, Self.AttackSpeed) * 1.5f;
+            Self.Anim?.PlayFor("grab", window * 0.5f);
+            Self.Proc?.Play(ProcAnim.Move.Grab);
+            bool hit = CombatSystem.Resolve(Self, CombatSystem.Grab);
+            if (hit)
+            {
+                Self.Anim?.PlayFor("throw", window * 0.75f);
+                Self.Proc?.Play(ProcAnim.Move.Throw);
+            }
+            TouchUI.I?.RefreshBars();
         }
     }
 }

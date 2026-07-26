@@ -24,8 +24,12 @@ namespace KaijuRuin
     {
         public enum Move
         {
-            Jab, Cross, Finisher, Heavy, Launcher, Sweep,
-            BackHop, AirRake, AirSlam, SpecialKest, SpecialTengi, Parry, Hit
+            Jab, Cross, Hook, Heavy, Launcher, Sweep,
+            BackHop, AirRake, AirSlam, SpecialKest, SpecialTengi, Parry, Hit,
+            // Session 10 (D-024): the kaiju-scaled additions. Each one exists so the
+            // move is readable BEFORE it resolves — an overhead has to be visibly
+            // above you, a low visibly under you, or the mix-up is a coin flip.
+            Slam, TailRound, LegSweep, Bash, Grab, Throw, Crouch
         }
 
         struct Gesture
@@ -59,6 +63,8 @@ namespace KaijuRuin
         bool active;
         float t;
         Gesture cur;
+        Move curMove;
+        bool sustain;       // hold the gesture at its peak (a guard stance, not a swing)
 
         void LateUpdate()
         {
@@ -74,6 +80,9 @@ namespace KaijuRuin
             {
                 t += dt;
                 float dur = Mathf.Max(0.01f, cur.dur * DurMul);
+                // A held stance stops at its peak instead of easing back out, so the
+                // crouch reads as a pose the player is holding, not a twitch.
+                if (sustain) t = Mathf.Min(t, dur * cur.peak);
                 float nt = t / dur;
                 if (nt >= 1f) { active = false; Apply(Vector3.zero, Vector3.zero, 0f); }
                 else
@@ -105,8 +114,25 @@ namespace KaijuRuin
             cur = Lookup(m);
             cur.pos *= extraAmp;
             cur.rot *= extraAmp;
+            curMove = m;
             t = 0f;
             active = true;
+            sustain = false;
+        }
+
+        // Enter a held pose (guard stance): run to the gesture's peak and stay there
+        // until Release(). Re-calling with the pose already held is a no-op, so the
+        // per-frame stance input does not restart the sink every frame.
+        public void Hold(Move m)
+        {
+            if (active && sustain && curMove == m) return;
+            Play(m);
+            sustain = true;
+        }
+
+        public void Release()
+        {
+            sustain = false;
         }
 
         // Jump the active gesture to its amplitude peak — the pose the move was
@@ -149,7 +175,7 @@ namespace KaijuRuin
             {
                 case Move.Jab:          return new Gesture { dur = 0.20f, pos = V(0.20f, 0f, 0f),    rot = V(0f, -8f, 0f),   squash = 0f,     peak = 0.28f };
                 case Move.Cross:        return new Gesture { dur = 0.24f, pos = V(0.28f, 0f, 0f),    rot = V(0f, -14f, 0f),  squash = 0f,     peak = 0.30f };
-                case Move.Finisher:     return new Gesture { dur = 0.30f, pos = V(0.34f, -0.05f, 0f),rot = V(0f, -10f, 0f),  squash = 0.05f,  peak = 0.32f };
+                case Move.Hook:         return new Gesture { dur = 0.30f, pos = V(0.30f, 0.02f, 0f), rot = V(0f, -26f, 0f),  squash = 0.03f,  peak = 0.34f };
                 case Move.Heavy:        return new Gesture { dur = 0.40f, pos = V(0.42f, -0.06f, 0f),rot = V(0f, -18f, 0f),  squash = 0.04f,  peak = 0.45f };
                 case Move.Launcher:     return new Gesture { dur = 0.34f, pos = V(0.14f, 0.30f, 0f), rot = V(0f, 0f, 8f),    squash = -0.10f, peak = 0.40f };
                 case Move.Sweep:        return new Gesture { dur = 0.34f, pos = V(0.30f, -0.02f, 0f),rot = V(0f, -6f, 0f),   squash = 0.22f,  peak = 0.35f };
@@ -160,6 +186,20 @@ namespace KaijuRuin
                 case Move.SpecialTengi: return new Gesture { dur = 0.50f, pos = V(0.36f, 0.22f, 0f), rot = V(0f, 0f, -24f),  squash = -0.06f, peak = 0.45f };
                 case Move.Parry:        return new Gesture { dur = 0.22f, pos = V(-0.06f, 0f, 0f),   rot = V(0f, 6f, 0f),    squash = 0f,     peak = 0.20f };
                 case Move.Hit:          return new Gesture { dur = 0.26f, pos = V(-0.28f, 0.04f, 0f),rot = V(0f, 16f, 0f),   squash = 0f,     peak = 0.18f };
+                // Overhead: rise onto the toes, then drive down and forward — the
+                // opposite arc to the sweep, which is the whole point of the pair.
+                case Move.Slam:         return new Gesture { dur = 0.44f, pos = V(0.26f, 0.34f, 0f), rot = V(0f, 0f, -18f),  squash = -0.14f, peak = 0.38f };
+                // Tail lash: the body turns through the swing rather than reaching.
+                case Move.TailRound:    return new Gesture { dur = 0.40f, pos = V(0.18f, 0.04f, 0f), rot = V(0f, -150f, 0f), squash = 0.04f,  peak = 0.42f };
+                case Move.LegSweep:     return new Gesture { dur = 0.26f, pos = V(0.22f, -0.06f, 0f),rot = V(0f, -10f, 0f),  squash = 0.30f,  peak = 0.30f };
+                // Haunch bash: no reach at all — the whole mass moves in.
+                case Move.Bash:         return new Gesture { dur = 0.30f, pos = V(0.34f, -0.02f, 0f),rot = V(0f, 8f, 0f),    squash = 0.12f,  peak = 0.30f };
+                case Move.Grab:         return new Gesture { dur = 0.34f, pos = V(0.30f, 0.06f, 0f), rot = V(0f, -6f, 0f),   squash = -0.04f, peak = 0.26f };
+                // Throw: haul up and over, then slam down past the knees.
+                case Move.Throw:        return new Gesture { dur = 0.50f, pos = V(0.20f, -0.10f, 0f),rot = V(0f, 0f, -34f),  squash = 0.24f,  peak = 0.45f };
+                // Crouch guard is a HELD stance, so it rides its envelope's peak for
+                // as long as the finger holds (re-played by the controller).
+                case Move.Crouch:       return new Gesture { dur = 0.30f, pos = V(-0.04f, -0.16f, 0f),rot = V(0f, 4f, 0f),   squash = 0.34f,  peak = 0.55f };
                 default:                return new Gesture { dur = 0.20f, pos = Vector3.zero,        rot = Vector3.zero,     squash = 0f,     peak = 0.30f };
             }
         }

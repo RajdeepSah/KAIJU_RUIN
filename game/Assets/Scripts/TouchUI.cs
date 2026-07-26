@@ -322,11 +322,23 @@ namespace KaijuRuin
             if (timerText != null) timerText.text = seconds.ToString();
         }
 
-        public void SetBlockIndicator(bool blocking)
+        // Which guard the player is holding (D-024). The stance must be visible: the
+        // two stances stop opposite halves of the moveset, so a player who cannot
+        // tell which one is up cannot read the mix-up. Standing sits at full height
+        // in Goryō teal; crouch drops the glyph and tints it amber, matching the
+        // sunken silhouette on the fighter.
+        public void SetGuardIndicator(Fighter.GuardKind guard)
         {
             if (blockGlyph == null) return;
-            blockGlyph.gameObject.SetActive(blocking);
-            blockGlyph.color = blocking ? AssetLib.GoryoFlame : AssetLib.AshSteel;
+            bool on = guard != Fighter.GuardKind.None;
+            blockGlyph.gameObject.SetActive(on);
+            if (!on) return;
+            bool crouch = guard == Fighter.GuardKind.Crouch;
+            blockGlyph.color = crouch ? AssetLib.SignalAmber : AssetLib.GoryoFlame;
+            UiKit.Rect(blockGlyph.gameObject,
+                       new Vector2(0.455f, crouch ? 0.885f : 0.905f),
+                       new Vector2(0.49f, crouch ? 0.935f : 0.965f),
+                       Vector2.zero, Vector2.zero);
         }
 
         // landedStep: 1/2/3 when a chain hit connects, 0 to clear.

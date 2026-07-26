@@ -158,6 +158,11 @@ namespace KaijuRuin
                 enemyAi.DashChance = 0.10f + 0.05f * (round - 1);
                 // Fewer breathing gaps between pokes as the match escalates (D-023).
                 enemyAi.IdleChance = round == 1 ? 0.22f : round == 2 ? 0.16f : 0.10f;
+                // How hard he punishes a held guard, and how often he takes the crouch
+                // stance himself (D-024). Round 1 lets a new player get away with
+                // turtling; by the final round it costs them.
+                enemyAi.MixupRate = round == 1 ? 0.45f : round == 2 ? 0.65f : 0.85f;
+                enemyAi.CrouchGuardRate = 0.25f + 0.10f * (round - 1);
             }
             TouchUI.I.SetRoundPips(playerRounds, enemyRounds);
             TouchUI.I.RefreshBars();
@@ -230,6 +235,22 @@ namespace KaijuRuin
                 { "idle", p + "idle.glb" }, { "walk", p + "walk.glb" },
                 { "punch", p + "punch.glb" }, { "block", p + "block.glb" },
                 { "hit", p + "hit.glb" }, { "death", p + "death.glb" },
+
+                // Per-move clips for the D-024 moveset (generated session 10 on the
+                // same Kest rig, seed 20260718). One clip per move is the point: the
+                // low/overhead mix-up is only fair if the wind-ups look different.
+                // Any of these can be dropped by commenting the line out —
+                // FighterAnimator falls back to `idle`, so nothing breaks; and
+                // several clips carry root translation (the roundhouse, the sweeps,
+                // the grab step), which shows up as the model sliding within its own
+                // silhouette and never as sim movement.
+                { "clawjab", p + "clawjab.glb" }, { "clawcross", p + "clawcross.glb" },
+                { "clawhook", p + "clawhook.glb" }, { "clawupper", p + "clawupper.glb" },
+                { "clawslam", p + "clawslam.glb" }, { "haymaker", p + "haymaker.glb" },
+                { "tailround", p + "tailround.glb" }, { "tailsweep", p + "tailsweep.glb" },
+                { "legsweep", p + "legsweep.glb" }, { "haunchbash", p + "haunchbash.glb" },
+                { "grab", p + "grab.glb" }, { "throw", p + "throw.glb" },
+                { "crouchguard", p + "crouchguard.glb" },
                 // Dedicated special-attack clip (generated session 8 — Meshy Charged_Spell_Cast,
                 // D-011/D-015). Code already calls Anim.Play("special"); loading it here makes
                 // the special animate on its own clip instead of Resolve() falling back to "punch".

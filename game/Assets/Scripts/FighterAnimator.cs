@@ -41,6 +41,11 @@ namespace KaijuRuin
 
         public bool Has(string state) => states.ContainsKey(state);
 
+        // Which state is on the rig right now. Callers that re-assert a HELD pose
+        // (guard stances) read this so they can skip a Play that would restart the
+        // clip from frame zero every frame.
+        public string Current => current;
+
         // Missing clips degrade per the design brief: special falls back to
         // punch, anything else falls back to idle.
         string Resolve(string state)
@@ -62,6 +67,21 @@ namespace KaijuRuin
             if (current == s) anim[s].time = 0f;
             current = s;
             anim.CrossFade(s, fade);
+        }
+
+        // Play `state` scaled so the clip runs through in roughly `seconds`.
+        //
+        // The generated action clips (D-011 / D-021 / D-024) are 0.6-4.8 s of
+        // wind-up, strike and settle, while a normal in this game recovers in
+        // 0.20-0.70 s. At speed 1 a jab showed the first ~10% of a 2 s clip — the
+        // fighter was still winding up when the hit had already resolved, which is
+        // exactly what makes a moveset read as one animation. Fitting the clip to the
+        // move's own window is what makes a distinct clip per move worth having.
+        // Clamped at both ends so nothing becomes a blur or a slideshow.
+        public void PlayFor(string state, float seconds, float fade = 0.05f)
+        {
+            float len = Length(state);
+            Play(state, fade, Mathf.Clamp(len / Mathf.Max(0.05f, seconds), 1f, 6f));
         }
 
         public void SetLocomotion(float speed01)

@@ -128,11 +128,11 @@ namespace KaijuRuin
             float dir = local.FacingRight ? 1f : -1f;
             float from = local.HurtDepth;
             float pokeTo = CombatSystem.StrikeExtent(local, CombatSystem.Jab);
-            float swingTo = CombatSystem.StrikeExtent(local, CombatSystem.Heavy);
+            float swingTo = CombatSystem.StrikeExtent(local, CombatSystem.LongestNormal);
             float gap = local.DistanceTo(foe);
 
             bool inPoke = gap <= CombatSystem.EffectiveReach(local, foe, CombatSystem.Jab);
-            bool inSwing = gap <= CombatSystem.EffectiveReach(local, foe, CombatSystem.Heavy);
+            bool inSwing = gap <= CombatSystem.EffectiveReach(local, foe, CombatSystem.LongestNormal);
 
             Segment(pokeBand, dir, from, pokeTo, inPoke ? AssetLib.GoryoFlame : AssetLib.AshSteel, inPoke ? 0.30f : 0.10f);
             Segment(swingBand, dir, pokeTo, swingTo,
@@ -151,9 +151,11 @@ namespace KaijuRuin
         }
 
         // ---- Debug overlay (F2) ---------------------------------------------
-        // One tick per boundary that decides a hit, for both fighters: push box,
-        // hurt box, jab, sweep/launcher, heavy. If the ticks and the silhouettes
-        // disagree on device, the CharacterDef body metrics are what to correct.
+        // One tick per boundary that decides a hit, for both fighters, inner to
+        // outer: push box (bone), hurt box (steel), GRAB (white, D-024), jab
+        // (flame), tail sweep (amber), longest normal (blood). If the ticks and the
+        // silhouettes disagree on device, the CharacterDef body metrics are what to
+        // correct — not the per-move reaches, which are anatomy (D-023).
         void PlaceDebugTicks()
         {
             int used = 0;
@@ -172,9 +174,12 @@ namespace KaijuRuin
             float dir = f.FacingRight ? 1f : -1f;
             n += Tick(start + n, f, dir, f.PushDepth, AssetLib.BonePaper);
             n += Tick(start + n, f, dir, f.HurtDepth, AssetLib.AshSteel);
+            // Grab range (D-024) sits between the push box and the jab: it is the
+            // boundary a player most needs to feel, since guard cannot answer inside it.
+            n += Tick(start + n, f, dir, CombatSystem.StrikeExtent(f, CombatSystem.Grab), Color.white);
             n += Tick(start + n, f, dir, CombatSystem.StrikeExtent(f, CombatSystem.Jab), AssetLib.GoryoFlame);
             n += Tick(start + n, f, dir, CombatSystem.StrikeExtent(f, CombatSystem.Sweep), AssetLib.SignalAmber);
-            n += Tick(start + n, f, dir, CombatSystem.StrikeExtent(f, CombatSystem.Heavy), AssetLib.BloodSeal);
+            n += Tick(start + n, f, dir, CombatSystem.StrikeExtent(f, CombatSystem.LongestNormal), AssetLib.BloodSeal);
             return n;
         }
 

@@ -8,8 +8,17 @@ namespace KaijuRuin
     //
     // Session 5 (D-015) adds the state the expanded moveset needs: per-character
     // cadence (AttackSpeed), dash i-frames, parry timing, and an air-juggle counter.
+    //
+    // Session 10 (D-024) replaces the single `Blocking` flag with a two-stance GUARD,
+    // because the mix-up moveset needs a stance to beat: standing guard stops
+    // high/mid but not lows, crouch guard stops lows but not overheads, and a
+    // command grab ignores both. Without the second stance the low/overhead pair and
+    // the grab would be normal attacks with no strategic purpose.
     public class Fighter : MonoBehaviour
     {
+        // Which stance the guard is held in. `None` is not guarding at all.
+        public enum GuardKind { None, Standing, Crouch }
+
         public const float MaxHp = 1000f;
         public const int MaxMeterSegments = 3;
         public const float MeterPerSegment = 150f;
@@ -19,7 +28,6 @@ namespace KaijuRuin
         public float Hp = MaxHp;
         public float Meter;                 // 0..450, one segment per 150
         public float WalkSpeed = 3.0f;      // was 2.6 — quicker neutral for a faster fight (D-015)
-        public bool Blocking;
         public bool FacingRight = true;
         public Fighter Opponent;
         public FighterAnimator Anim;
@@ -39,6 +47,25 @@ namespace KaijuRuin
         public bool ParryArmed;             // this block press is a parry attempt
         public float InvulnUntil;           // dash i-frames
         public int JuggleCount;             // hits taken in the current air juggle
+
+        // Guard state (D-024). `Blocking` is kept as the "guarding at all" read so
+        // every existing call site keeps its meaning.
+        public GuardKind Guard;
+        public bool GuardWalking;           // guard is the held-back kind: retreat is still allowed
+        public bool Crouching;              // sunk stance (crouch guard implies it); no walking
+        public float GuardLockUntil;        // attacking opens you up: no re-guard until recovery ends
+
+        public bool Blocking => Guard != GuardKind.None;
+
+        // What this fighter threw last, in guard terms. The AI reads it off its
+        // opponent to pick a stance, so leaning on one half of the mix-up gets
+        // answered (CombatSystem.Resolve writes it on every attack).
+        public bool LastAttackLow, LastAttackOverhead;
+
+        // An attack (or stun) commits you out of guard until it finishes, so a
+        // crouch-guarding fighter cannot throw lows from behind an unbroken wall.
+        public bool CanGuard => !Dead && Time.time >= GuardLockUntil && Time.time >= StunUntil
+                                && !RoundManager.RoundFrozen && !GameManager.Paused;
 
         // Body metrics from this fighter's CharacterDef (D-023). Defaults = Kest.
         // These are the sim's model of the SILHOUETTE, so every range read — hit
@@ -108,8 +135,10 @@ namespace KaijuRuin
 
         public void MoveAxis(float axis)
         {
-            if (Dead || Blocking || Dashing || Time.time < StunUntil
+            if (Dead || Dashing || Crouching || Time.time < StunUntil
                 || RoundManager.RoundFrozen || CombatFx.Frozen || GameManager.Paused) return;
+            // Guarding roots you unless the guard IS the retreat (held-back guard).
+            if (Blocking && !GuardWalking) return;
             float mult = StageManager.I != null && StageManager.I.Flooded ? 0.9f : 1f;
             var p = transform.position;
             p.x = Mathf.Clamp(p.x + axis * WalkSpeed * mult * Time.deltaTime, -Arena, Arena);
@@ -141,25 +170,55 @@ namespace KaijuRuin
             return true;
         }
 
-        // A block press. Armed presses can perfect-guard within the parry window;
-        // the AI blocks unarmed (chip only) except when it deliberately reads a parry.
-        public void BeginBlock(bool armed)
+        // A guard press. Armed presses can perfect-guard within the parry window;
+        // the AI guards unarmed (chip only) except when it deliberately reads a parry.
+        // `walking` marks the held-back guard, which may still retreat (holding away
+        // is both "walk back" and "guard" in any 2D fighter) — the committed
+        // right-thumb hold roots you in place instead.
+        //
+        // Re-entering the SAME stance does not restart the parry window: the stance
+        // is driven from a held finger every frame, and re-arming per frame would
+        // make the 160 ms window permanent.
+        public void BeginGuard(GuardKind kind, bool armed, bool walking)
         {
-            Blocking = true;
+            if (kind == GuardKind.None) { EndGuard(); return; }
+            if (!CanGuard) return;
+            GuardWalking = walking;
+            Crouching = kind == GuardKind.Crouch;
+            if (Guard == kind) return;
+            Guard = kind;
             BlockStartedAt = Time.time;
             ParryArmed = armed;
         }
 
-        public void EndBlock()
+        // Leaving a guard also leaves the crouch. Crouching gates movement, so a
+        // stance that outlived its guard would root the fighter for the rest of the
+        // round — which is exactly what happened to the AI after its first crouch
+        // guard, since it drops guard through this method and never sets the stance
+        // from a held finger the way the player does.
+        public void EndGuard()
         {
-            Blocking = false;
+            Guard = GuardKind.None;
+            GuardWalking = false;
+            Crouching = false;
             ParryArmed = false;
+        }
+
+        // Committing to an attack drops the guard for the length of its recovery.
+        public void OpenUpUntil(float time)
+        {
+            GuardLockUntil = Mathf.Max(GuardLockUntil, time);
+            EndGuard();
+            Crouching = false;
         }
 
         public void ResetForRound(float x)
         {
             Hp = MaxHp;
-            Blocking = false;
+            Guard = GuardKind.None;
+            GuardWalking = false;
+            Crouching = false;
+            GuardLockUntil = 0f;
             ParryArmed = false;
             Airborne = false;
             JuggleCount = 0;
