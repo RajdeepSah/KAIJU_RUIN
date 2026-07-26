@@ -24,6 +24,7 @@ namespace KaijuRuin
             public bool Knockdown;  // floors the target (long stun + wake-up i-frames)
             public bool Launch;     // pops / keeps the target airborne
             public FxWeight Fx;     // hit-stop + shake profile
+            public int CardSlot;    // 1..3 for a special card, 0 for a normal (D-026 reads tier 3)
             public string Vfx;      // sprite under Resources/Art/vfx, optional (marks a special)
             public string Sfx;
         }
@@ -178,12 +179,16 @@ namespace KaijuRuin
 
         // Specials took the same ~62% cut, so a card's share of a health bar is what
         // it always was: slot 3 is still a quarter-bar swing, not a third of one.
-        public static Attack KestS1  => new Attack { Name = "Fox-fire Dash",  Damage = 38,  Reach = 3.2f, Recovery = 0.5f, Knockback = 1.0f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
-        public static Attack KestS2  => new Attack { Name = "Phantom Rake",   Damage = 60,  Reach = 1.4f, Recovery = 0.7f, Knockback = 0.8f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
-        public static Attack KestS3  => new Attack { Name = "Hunt of Shadows",Damage = 105, Reach = 2.2f, Recovery = 1.0f, Knockback = 2.0f, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
-        public static Attack TengiS1 => new Attack { Name = "Crow Wall",      Damage = 49,  Reach = 1.4f, Recovery = 0.6f, Knockback = 1.0f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
-        public static Attack TengiS2 => new Attack { Name = "Culling Arc",    Damage = 68,  Reach = 3.0f, Recovery = 0.8f, Knockback = 1.5f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
-        public static Attack TengiS3 => new Attack { Name = "Black Sun",      Damage = 112, Reach = 1.8f, Recovery = 1.4f, Knockback = 2.2f, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
+        //
+        // CardSlot is carried as data (D-026) so the cinematic layer can single out
+        // the tier-3 supers without matching on a character's move name — the same
+        // reason SpecialIsDash exists rather than a "set == kest" test at the call site.
+        public static Attack KestS1  => new Attack { Name = "Fox-fire Dash",  Damage = 38,  Reach = 3.2f, Recovery = 0.5f, Knockback = 1.0f, CardSlot = 1, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
+        public static Attack KestS2  => new Attack { Name = "Phantom Rake",   Damage = 60,  Reach = 1.4f, Recovery = 0.7f, Knockback = 0.8f, CardSlot = 2, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
+        public static Attack KestS3  => new Attack { Name = "Hunt of Shadows",Damage = 105, Reach = 2.2f, Recovery = 1.0f, Knockback = 2.0f, CardSlot = 3, Fx = FxWeight.Special, Vfx = "kest_foxfire",     Sfx = "kest_special" };
+        public static Attack TengiS1 => new Attack { Name = "Crow Wall",      Damage = 49,  Reach = 1.4f, Recovery = 0.6f, Knockback = 1.0f, CardSlot = 1, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
+        public static Attack TengiS2 => new Attack { Name = "Culling Arc",    Damage = 68,  Reach = 3.0f, Recovery = 0.8f, Knockback = 1.5f, CardSlot = 2, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
+        public static Attack TengiS3 => new Attack { Name = "Black Sun",      Damage = 112, Reach = 1.8f, Recovery = 1.4f, Knockback = 2.2f, CardSlot = 3, Fx = FxWeight.Special, Vfx = "tengi_bladewave",  Sfx = "tengi_special" };
 
         // Card slot (1..3) -> Attack for a character's special set. Adding a set for a
         // new champion is one more branch here + its cards on the fighter (D-017).
@@ -282,6 +287,14 @@ namespace KaijuRuin
                 return false;
             }
 
+            // Cinematic inputs, captured BEFORE the hit mutates either of them
+            // (D-026). A counter is a strike that lands on someone still committed to
+            // their own — mid-recovery and NOT already in hitstun, which is what
+            // separates a whiff punish from the second hit of a combo. Both reads are
+            // destroyed a few lines below, where StunUntil and Hp are written.
+            bool wasCounter = Time.time < target.AttackLockUntil && Time.time >= target.StunUntil;
+            float hpBefore = target.Hp;
+
             float damage = atk.Damage;
             if (blocked)
             {
@@ -358,8 +371,16 @@ namespace KaijuRuin
                 target.Dead = true;
                 target.Airborne = false;
                 target.Anim?.Play("death", 0.1f);
-                CombatFx.Shake(0.28f, 0.5f);               // KO owns its longer freeze in RoundManager
+                // The killing blow used to be the ONE clean hit with no hit-stop at
+                // all — it returns before ApplyImpactFx — so it landed softer than the
+                // jab before it. It now gets the longest bite in the game, which is
+                // also the front half of the KO slow-motion beat: the freeze is what
+                // the cinematic eases out of (TimeDirector's lead phase waits for it).
+                CombatFx.HitStop(CombatFx.StopKo);
+                CombatFx.Shake(0.28f, 0.5f);
                 CombatFx.Punch(0.6f, 0.3f);
+                // Fires the KO cinematic from inside OnKo, where the round score is
+                // known and a match-winning blow can earn the deeper shot.
                 RoundManager.I?.OnKo(attacker, target);
                 return !blocked;
             }
@@ -367,6 +388,7 @@ namespace KaijuRuin
             if (!blocked)
             {
                 ApplyImpactFx(atk.Fx);
+                Cinematics.OnCleanHit(attacker, target, atk, wasCounter, hpBefore);
                 TouchUI.I?.OnHitLanded(attacker);
             }
             return !blocked;

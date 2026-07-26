@@ -148,14 +148,19 @@ namespace KaijuRuin
         public void TogglePause()
         {
             Paused = !Paused;
-            Time.timeScale = Paused ? 0f : 1f;
+            // timeScale is TimeDirector's to write since D-026 — slow motion is a
+            // second author of the same global, and pausing at 0.35x (or resuming to
+            // 1.0 out of a cinematic that was mid-ramp) is what happens when two
+            // systems both think they own it. Pause always wins, and it cancels any
+            // running shot rather than layering on top of it.
+            TimeDirector.SetPaused(Paused);
             TouchUI.I?.ShowPauseOverlay(Paused);
         }
 
         void CleanupFight()
         {
             Paused = false;
-            Time.timeScale = 1f;
+            TimeDirector.HardReset();     // never carry a cinematic (or a pause) into the next fight
             RoundManager.RoundFrozen = true;
             if (fightRoot != null) { Destroy(fightRoot); fightRoot = null; }
             // Cleanup runs before every fight starts, so at most one set exists;

@@ -260,3 +260,57 @@ Two things did change beyond arithmetic:
 **Flagged risk, owner's call:** at the *passive* end of the model (low engagement plus a lot of neutral/approach time) the 60 s timer starts producing timeouts rather than KOs — 85–100% of rounds still end in a KO at realistic engagement, but only ~10–75% in the passive case. Raising `RoundManager.RoundSeconds` to 75 or 99 s restores KO as the outcome in every modelled case, but that constant is part of D-013's locked best-of-3 / 60 s format from the intake interview, so it was **left alone** rather than changed unilaterally. The second flagged item: cards will feel far more available (~2.7× the casts per round). If that reads as fireworks rather than earned bursts, the dial is `Fighter.MeterPerSegment` (150) or the `MeterDealt` constant.
 
 Not verified: **on-device feel.** No Android device is attached and the editor holds the project lock, so "competitive and tense, not draggy" remains the owner's confirmation step (STATUS Next-up 1 carries the protocol and the knob-per-symptom table).
+
+## D-026 — Session 12: selective slow motion for critical hits and finishers (2026-07-26, accepted — owner directive)
+
+The owner directed a slow-motion system that plays **only during certain attacks** — critical hits and finishing moves, **not every hit** — and that looks **smooth and realistic, with natural transitions in and out, so it never feels fake or jarring**.
+
+Implemented as two new scripts with a deliberate split: **`TimeDirector.cs` owns how a shot looks, `Cinematics.cs` owns which hits earn one.** The brief has two independent halves — an easing problem and a rarity problem — and they have nothing to do with each other; keeping the rarity policy out of the effect means the budget can be re-tuned without touching a curve, and vice versa.
+
+**`Time.timeScale` is the mechanism, and ownership of it moves to `TimeDirector`.** Every deadline in this fight is an absolute `Time.time` stamp (`AttackLockUntil`, `StunUntil`, `InvulnUntil`, `BlockStartedAt`, the chain/cancel/buffer windows, `roundEndsAt`) and every movement integrates `Time.deltaTime` — both scaled. So one write dilates recovery, stun, walk speed, the legacy clip on the rig, the `ProcAnim` envelope and the VFX fades **in step**, which is exactly what a hand-rolled slow-motion layer across 35 scripts could not guarantee. Drift between two systems' idea of "now" is precisely what reads as fake. This is a change of position from `CombatFx`'s header, which avoided `timeScale` because pause already owned it: the answer is that *nothing else* may own it now. `GameManager.TogglePause` routes through `TimeDirector.SetPaused` (pause always wins and cancels any running shot), and hit-stop keeps its separate freeze-window pattern, which composes with slow motion rather than competing for the global.
+
+**What makes it not look fake** — four decisions, in order of how much each mattered:
+
+1. **The ramps run on unscaled time.** Easing *out* of slow motion on scaled time is the classic bug: the exit is itself slowed, so the fight wades back to speed.
+2. **The interpolation is logarithmic.** What the eye tracks is the frame-to-frame *ratio* of the time scale, not its difference. Modelled over the deepest shot at the 60 fps cap, log interpolation gives a symmetric perceptual arc peaking in the middle of the ramp, where the easing curve intends it; linear interpolation of the same curve drifts its perceptual peak to ~75% of the way through and then kinks — it slows hardest just before it stops slowing.
+3. **The envelope is asymmetric in duration, not in curve shape** (~0.15 s in, 2.5–3.5× longer out), and both ramps use **smootherstep**, whose first derivative is zero at both ends so a ramp meeting a flat stretch has no kink. *This was a correction found by modelling, not by design.* The first attempt front-loaded the entry with an ease-out cubic on the theory that impact should feel abrupt; at 60 fps that put a **0.17 scale jump in the very first frame** of a 5-frame ramp and spent the rest crawling — a cut wearing a curve's name. The bite belongs in the hit-stop that already precedes the ramp; a second discontinuity behind it is the jarring the brief names. No ease-in is now shorter than ~9 frames.
+4. **It starts *after* the hit-stop, not instead of it.** A lead phase simply waits for `CombatFx` to unfreeze (capped at 0.25 s), so the beat is impact → freeze → time pours out → hold → return, as one event.
+
+Verified by modelling the exact per-frame state machine at the 60 fps cap: first-frame scale delta **0.010–0.016** (was 0.167), last-frame delta **≤0.0002**, and every phase boundary continuous to **±0.0002**.
+
+**Audio is part of the illusion, not a garnish.** Silent slow motion reads as a dropped frame. `AudioManager.SetTimeStretch` is driven every frame with the live scale: SFX pitch follows it almost fully (`AudioSource.pitch` applies to `PlayOneShot` voices already in flight, so the impact that *caused* the shot drags with it), music only slightly plus a duck (a loop pitched an octave down reads as comedy or as a broken build), and **VO not at all** — the announcer's "K.O." fires into the deepest shot in the game and must stay intelligible.
+
+**The four shots** (durations are unscaled seconds; a stronger shot interrupts a weaker one, blending out of the *current* scale rather than snapping back to 1 first):
+
+| shot | scale | in | hold | out | dolly | wall |
+|---|---|---|---|---|---|---|
+| critical | 0.32 | 0.14 | 0.16 | 0.34 | 0.35 m | 0.64 s |
+| super (tier-3 card) | 0.26 | 0.16 | 0.26 | 0.42 | 0.55 m | 0.84 s |
+| K.O. | 0.20 | 0.18 | 0.34 | 0.52 | 0.70 m | 1.04 s |
+| match-winning K.O. | 0.15 | 0.20 | 0.55 | 0.70 | 0.90 m | 1.45 s |
+
+Each carries a sustained camera push-in (`TimeDirector.DollyZ`, added to the existing `CombatFx.PunchZ` in `RoundManager.UpdateCamera`) so the moment reads as a shot rather than as lag. The dolly rides the unscaled envelope — it is the camera moving, not the fight — while camera *framing* stays on scaled time, because the camera is part of the world.
+
+**"Certain attacks" is a budget problem, and the budget is where the work is.** Rounds now run 42–60 s with 32–45 clean hits in them and cards fire ~2.7× more often (D-025), so a shot on every heavy — or on every card — would put the fight in slow motion for a fifth of its length, at which point it is the frame rate, not an accent. Hence: **at most 2 non-K.O. shots per round, at least 7 s apart**, K.O. exempt (there is one). At full budget that is **2.4–2.8 s of cinema in a 43–61 s round — 4–6% of its length, 7–9% of its clean hits.** Set deliberately at the rare end: too rare is a one-constant fix, too frequent is the failure the brief names and by the time it is felt the effect has stopped meaning anything.
+
+**A "critical hit" here is earned, never rolled.** There is no RNG in any trigger — a random crit would make the same read look different on two identical inputs, and it would be the first non-deterministic thing in a sim the live-PvP plan wants to keep lockstep-able (D-017). The triggers, all states the player can cause on purpose:
+
+- **COUNTER** — a committed strike (Heavy / Launch / Special weight, or the grab) landing on someone still mid-swing: `Time.time < target.AttackLockUntil` **and** not already in hitstun, which is what separates a whiff punish from the second hit of a combo. A jab that happens to catch someone mid-swing does not qualify; only a committed one does.
+- **BREAKER** — the hit taking an opponent from above a quarter health to at or below it. Self-limiting by construction: health only falls within a round.
+- **COMEBACK** — a committed strike landed from under a fifth health. Once per fighter per round.
+- **SUPER** — a **tier-3 card only** connecting. Tier 3 costs the whole meter bar; tiers 1 and 2 are the ones D-025 made frequent and are deliberately excluded. `CombatSystem.Attack` gained a `CardSlot` field so this is read from data rather than by matching a character's move name.
+- **K.O.** — the finishing blow, always, and deeper still when it takes the match.
+
+**Damage is untouched.** "Critical" classifies the *moment*, not the numbers: D-025's table is one session old and was tuned move-by-move to a 37.5% factor, so adding crit damage on top would quietly undo it. If crit damage is ever wanted it is a separate decision with its own re-tune.
+
+Three consequential side-fixes the work exposed:
+
+- **The killing blow had no hit-stop at all.** `Resolve` returns on the death path before `ApplyImpactFx`, so the KO landed softer than the jab before it. It now takes the longest bite in the game (`CombatFx.StopKo` = 0.16 s), which doubles as the front half of the KO cinematic.
+- **Scaled `WaitForSeconds` in the round flow is stretched by the very cinematic it waits on.** The KO beat's 0.4 s would have run ~2.7 s at the match-point shot's 0.15×, and the "K.O." banner behind it (also a scaled wait) roughly nine. Both the KO beat and the TIME path now hand time back first, via `TimeDirector.WaitForRelease` / `Release`.
+- **Online is locked out.** `Cinematics.OnlineLockout` is set from `NetService.Active == Backend.Relay`: dilating one peer's clock in a lockstep match is a desync, not an effect. Gated on the *backend* rather than on "a transport is open", because loopback is a local AI wearing a transport and has no second clock to disagree with.
+
+Also: **F3** toggles the whole system (joining F1 perf and F2 range overlays) and persists to `PlayerPrefs` `kr.slowmo` — a preference and an accessibility affordance, since motion effects are not universally welcome.
+
+Effect on the D-025 timeout risk: a full round of cinema spends only ~1.2 s of the 60 s round clock while taking ~2.4 s of real time, so rounds get marginally *longer in wall-clock and cheaper in clock* — it nudges away from timeouts rather than toward them.
+
+Not verified: **on-device feel.** No Android device is attached and the editor holds the project lock. The envelope is verified numerically and the budget arithmetically; whether 0.32× for 0.64 s reads as a punch landing or as a hitch is the owner's call, and STATUS Next-up carries the protocol.

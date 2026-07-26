@@ -133,6 +133,37 @@ Changed beyond arithmetic: **combo windows widened ~17%** (chain 0.60 -> 0.70 s,
 
 Modelled result: median round **20-26 s -> 42-60 s**, clean hits per round **14-17 -> 32-45**. Open risk in D-025: at the passive end of the model the 60 s timer starts producing timeouts instead of KOs, and the fix (75-99 s) touches D-013's locked format, so it awaits the owner's on-device read.
 
+## IMPACT CINEMA - selective slow motion (session 12, D-026 - owner directive)
+
+Slow motion plays **only on certain attacks**, never on an ordinary hit. Two scripts: `TimeDirector.cs` (how a shot looks - it is also the **sole owner of `Time.timeScale`**, which pause now routes through) and `Cinematics.cs` (which hits earn one).
+
+**Triggers - all earned, none random.** No RNG anywhere: a random crit would make the same read look different on two identical inputs, and would be the first non-deterministic thing in a sim the live-PvP plan wants lockstep-able.
+
+| trigger | condition | shot |
+|---|---|---|
+| COUNTER | a **committed** strike (Heavy/Launch/Special weight, or the grab) lands on someone mid-swing - inside their own `AttackLockUntil` and **not** already in hitstun (a whiff punish, not the 2nd hit of a combo) | critical |
+| BREAKER | the hit that takes an opponent from above **25%** health to at or below it (self-limiting - health only falls within a round) | critical |
+| COMEBACK | a committed strike landed from under **20%** health; once per fighter per round | critical |
+| SUPER | a **tier-3 card only** connecting cleanly (tiers 1-2 are the ones D-025 made frequent, and are excluded) | super |
+| K.O. | the finishing blow, always; deeper and longer when it takes the match | ko / match-ko |
+
+**Budget: at most 2 non-K.O. shots per round, at least 7 s apart** (K.O. exempt - there is one). At full budget that is **2.4-2.8 s of cinema in a 43-61 s round: 4-6% of its length, 7-9% of its clean hits.** Set at the rare end on purpose - too rare is a one-constant fix; too frequent is the failure the directive names.
+
+**Shot table** (unscaled seconds; a stronger shot interrupts a weaker one, blending from the *current* scale rather than snapping back to 1 first):
+
+| shot | scale | ease in | hold | ease out | camera push-in | wall-clock |
+|---|---|---|---|---|---|---|
+| critical | 0.32 | 0.14 | 0.16 | 0.34 | 0.35 m | 0.64 s |
+| super | 0.26 | 0.16 | 0.26 | 0.42 | 0.55 m | 0.84 s |
+| K.O. | 0.20 | 0.18 | 0.34 | 0.52 | 0.70 m | 1.04 s |
+| match K.O. | 0.15 | 0.20 | 0.55 | 0.70 | 0.90 m | 1.45 s |
+
+**Why it reads as a camera move and not as lag:** ramps run on **unscaled** time (easing out on scaled time means the fight wades back to speed); interpolation is **logarithmic**, because the eye tracks the frame-to-frame *ratio* of the scale; the envelope is asymmetric in **duration only** (~0.15 s in, 2.5-3.5x longer out) with **smootherstep** on both ramps, so a ramp meeting a flat stretch has no kink; and a shot **starts after the hit-stop bite**, waiting for `CombatFx` to unfreeze, so impact -> freeze -> slow motion -> return is one event. Audio follows: SFX pitch drags almost fully with the scale (including the impact already in flight), music dips and ducks slightly, **VO not at all**.
+
+**Damage is untouched** - "critical" classifies the moment, not the numbers. Adding crit damage would quietly undo the D-025 table.
+
+Locked out during **live remote PvP** (dilating one peer's clock is a desync, not an effect); loopback/AI is unaffected. **F3** toggles the whole system, persisted to `PlayerPrefs` `kr.slowmo`.
+
 ## ENEMY AI (Tengi)
 
 State machine in EnemyAI.cs: APPROACH, POKE (lights/heavy mix), PUNISH (whiffed player heavy triggers counter window), DEFEND, SPEND (S1 at 1 seg as a close interrupt, S2 at 2 seg as the ranged answer, S3 at 3 seg on a knockdown). Difficulty ramps per round: reaction delay 320 ms round 1, 260 ms round 2, 200 ms round 3; block rate +10 percent per round (45 percent base).
@@ -147,7 +178,7 @@ State machine in EnemyAI.cs: APPROACH, POKE (lights/heavy mix), PUNISH (whiffed 
 - Match: best-of-3 rounds, 60 s timer per round. Round ends on KO or timeout (higher remaining HP wins the round).
 - Round banners: "ROUND ONE" / "ROUND TWO" / "FINAL ROUND" then "FIGHT". KO shows "K.O."; timeout shows "TIME".
 - LIVING STAGE EVENT (interview decision): after round 1 ends, a scripted cutaway plays - khulandra_breach sprite rises behind the midground with roar SFX and vfx_kaiju_shockwave, banner "KHULANDRA RISES", and the ground layer swaps from harbor_ground to harbor_ground_flooded for the rest of the match. Fighters wade: walk speed -10 percent, splash particles on movement. Kaiju stays frame-breaking scale (Pillar 2) - only the breach sprite, never a full body.
-- Match point: winning blow freezes 0.4 s, smash-cut (sfx_ending_sting) to the winner's Horrific Ending splash panel with caption, then results.
+- Match point: winning blow freezes, smash-cut (sfx_ending_sting) to the winner's Horrific Ending splash panel with caption, then results. **Amended session 12, D-026:** the freeze is now a composed beat rather than a flat 0.4 s wait — a 0.16 s hit-stop (`CombatFx.StopKo`; the killing blow previously had *no* hit-stop at all, since `Resolve` returns before the impact FX on the death path) easing straight into the K.O. slow-motion shot, and the "K.O." banner waits in **real** time for that shot to release. A scaled `WaitForSeconds` there is stretched by the very cinematic it waits on: 0.4 s would run ~2.7 s at the match shot's 0.15×. *Superseded: "winning blow freezes 0.4 s".*
 - Player wins: panel_ending_kest_01, caption "The fox does not bury its dead. It multiplies them."
 - Player loses: panel_ending_tengi_01, caption "The culling spares no one. Not even the brave."
 

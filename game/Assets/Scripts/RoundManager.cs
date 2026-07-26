@@ -77,6 +77,15 @@ namespace KaijuRuin
             player.Opponent = enemy;
             enemy.Opponent = player;
 
+            // Slow motion dilates the LOCAL clock, which is an effect in a solo or
+            // loopback match and a desync in a lockstep one — there is no way to hold
+            // two peers' clocks together through an unsynchronised time ramp. Gated on
+            // the backend rather than on "is a transport open", because loopback is a
+            // local AI wearing a transport and has no second clock to disagree with
+            // (D-017/D-026). Wire this off in RelayTransport's peer handshake if the
+            // live path ever wants shared cinematics.
+            Cinematics.OnlineLockout = NetService.I != null && NetService.I.Active == NetService.Backend.Relay;
+
             // Opponent control: a live remote peer if a real transport is connected,
             // otherwise the AI (solo + the shipping loopback online path, D-017).
             if (MatchConfig.RemoteOpponent && NetService.I != null && NetService.I.Transport != null)
@@ -147,6 +156,8 @@ namespace KaijuRuin
         {
             RoundFrozen = true;
             CombatFx.Reset();                 // no freeze/shake leaks across rounds
+            TimeDirector.Abort();             // ...and no cinematic still ramping into round 2
+            Cinematics.ResetRound();          // budget + cooldown are per round (D-026)
             player.ResetForRound(-2.5f);
             enemy.ResetForRound(2.5f);
             if (enemyAi != null)
@@ -188,6 +199,12 @@ namespace KaijuRuin
                 {
                     roundOver = true;
                     RoundFrozen = true;
+                    // A cinematic can still be ramping when the clock runs out (a
+                    // critical hit landed a moment before TIME). Hand time back first:
+                    // the banner below waits on SCALED seconds, so 1.2 s would run
+                    // ~4 s if the round ended at 0.3x.
+                    TimeDirector.Release(0.25f);
+                    yield return TimeDirector.WaitForRelease(0f);
                     AudioManager.I?.Sfx("ending_sting", 0.6f);
                     if (player.Hp >= enemy.Hp) playerRounds++; else enemyRounds++;
                     TouchUI.I.SetRoundPips(playerRounds, enemyRounds);
@@ -206,6 +223,10 @@ namespace KaijuRuin
             // Tally synchronously so the match loop never reads a stale score;
             // the KO banner coroutine is presentation only.
             if (winner == player) playerRounds++; else enemyRounds++;
+            // Fired here rather than from CombatSystem because this is the only place
+            // that knows whether the blow took the MATCH — which earns the deeper,
+            // longer shot (D-026). Read after the tally, so 2 rounds means match point.
+            Cinematics.OnKo(playerRounds == 2 || enemyRounds == 2);
             TouchUI.I?.SetRoundPips(playerRounds, enemyRounds);
             koBannerDone = false;
             StartCoroutine(KoSequence());
@@ -215,7 +236,11 @@ namespace KaijuRuin
         {
             RoundFrozen = true;
             AudioManager.I?.Announce("announcer_ko");
-            yield return new WaitForSeconds(0.4f);      // hit freeze beat
+            // REAL time, and until the cinematic has released. A WaitForSeconds here
+            // is stretched by the very slow motion it is waiting on — the 0.4 s beat
+            // would run ~2.7 s at the match-point shot's 0.15x, and the K.O. banner
+            // (itself a scaled wait) would then sit on screen for nine seconds.
+            yield return TimeDirector.WaitForRelease(0.4f);
             yield return TouchUI.I.Banner("K.O.", 1.4f);
             koBannerDone = true;
         }
@@ -326,9 +351,14 @@ namespace KaijuRuin
             float dist = Mathf.Abs(player.transform.position.x - enemy.transform.position.x);
             float z = Mathf.Lerp(-6.6f, -7.5f, Mathf.InverseLerp(2.5f, 7f, dist));   // 10% tighter when close
             var target = new Vector3(Mathf.Clamp(midX, -3.5f, 3.5f), 1.7f, z);
+            // Framing tracks on SCALED time deliberately: the camera is part of the
+            // world, so it should drift as slowly as the fighters during a cinematic.
+            // The slow-motion dolly below is the exception — it rides the unscaled
+            // envelope, because it is the shot moving, not the fight.
             camBase = Vector3.Lerp(camBase, target, Time.deltaTime * 5f);
             var pos = camBase + CombatFx.ShakeOffset();
-            pos.z += CombatFx.PunchZ();     // dolly toward the action on heavy impacts
+            pos.z += CombatFx.PunchZ()      // dolly toward the action on heavy impacts
+                   + TimeDirector.DollyZ;   // sustained push-in for the length of a cinematic (D-026)
             cam.transform.position = pos;
         }
     }

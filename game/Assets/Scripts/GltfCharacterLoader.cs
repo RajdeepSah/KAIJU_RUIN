@@ -20,9 +20,36 @@ namespace KaijuRuin
 #endif
         }
 
+        // Names of the built-in-RP shaders glTFast resolves via Shader.Find in a player
+        // build. Unlike the Editor (which loads them through the AssetDatabase), a player
+        // only sees shaders the build included, and nothing in the scene references these
+        // -- so they must stay in Project Settings > Graphics > Always Included Shaders.
+        // Stripped, glTFast returns a null material and the character renders flat magenta
+        // while sprite-based props are unaffected: say so instead of shipping a pink ghost.
+#if !UNITY_EDITOR
+        static readonly string[] RequiredShaders = { "glTF/PbrMetallicRoughness", "glTF/Unlit" };
+        static bool shadersChecked;
+#endif
+
+        static void CheckShaders()
+        {
+#if !UNITY_EDITOR
+            if (shadersChecked) return;
+            shadersChecked = true;
+            foreach (var name in RequiredShaders)
+            {
+                if (Shader.Find(name) != null) continue;
+                Debug.LogError("Shader '" + name + "' was stripped from this build - characters will "
+                    + "render as flat magenta. Add Packages/com.unity.cloud.gltfast/Runtime/Shader/"
+                    + "Built-In/ shaders to Project Settings > Graphics > Always Included Shaders.");
+            }
+#endif
+        }
+
         public static async Task<GameObject> LoadCharacter(string baseGlb, Dictionary<string, string> clipFiles,
             Vector3 position, bool faceRight, Transform parent)
         {
+            CheckShaders();
             var root = new GameObject(baseGlb);
             root.transform.SetParent(parent, false);
             root.transform.position = position;

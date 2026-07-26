@@ -24,6 +24,11 @@ namespace KaijuRuin
         public const float StopLaunch  = 0.08f;
         public const float StopSpecial = 0.14f;
         public const float StopParry   = 0.12f;
+        // The finishing blow. Longest bite in the game, and the front half of the KO
+        // slow-motion beat — TimeDirector's lead phase waits for this freeze to
+        // release before it starts dilating, so impact, freeze and slow motion read
+        // as one continuous event rather than two effects fighting for the frame.
+        public const float StopKo      = 0.16f;
 
         public static void HitStop(float dur)
         {
